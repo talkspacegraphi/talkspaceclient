@@ -67,6 +67,8 @@ const GlobalStyles = () => (
         .drag-overlay { background: rgba(88, 101, 242, 0.2); border: 2px dashed #5865F2; backdrop-filter: blur(2px); }
         .mention { background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 2px; border-radius: 3px; font-weight: 500; cursor: pointer; }
         .mention:hover { background: rgba(88, 101, 242, 0.6); }
+        
+        /* Tooltip implementation */
         .hover-tooltip:hover::after {
             content: attr(data-tooltip);
             position: absolute;
@@ -79,9 +81,11 @@ const GlobalStyles = () => (
             font-size: 10px;
             border-radius: 4px;
             white-space: nowrap;
-            margin-bottom: 5px;
-            z-index: 50;
+            margin-bottom: 8px;
+            z-index: 100;
             pointer-events: none;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            font-weight: bold;
         }
     `}</style>
 );
@@ -99,6 +103,36 @@ const BackgroundEffect = () => (
         <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-b from-transparent via-black/20 to-black/80"/>
     </div>
 );
+
+// --- MISSING LOADING SCREEN FIXED HERE ---
+function LoadingScreen() {
+    const [fact, setFact] = useState(LOADING_FACTS[0]);
+    useEffect(() => { setFact(LOADING_FACTS[Math.floor(Math.random() * LOADING_FACTS.length)]); }, []);
+    return (
+        <div className="fixed inset-0 bg-[#000] z-[9999] flex flex-col items-center justify-center text-center p-4">
+            <GlobalStyles />
+            <motion.div animate={{ rotate: 360, scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} className="w-20 h-20 bg-[var(--primary)] rounded-full mb-8 flex items-center justify-center shadow-[0_0_50px_rgba(88,101,242,0.8)]"><div className="text-white font-black text-3xl">T</div></motion.div>
+            <h2 className="text-white font-bold text-lg mb-2 uppercase tracking-widest">TalkSpace</h2>
+            <p className="text-gray-500 text-xs tracking-widest animate-pulse mb-6">ESTABLISHING CONNECTION</p>
+            <p className="text-gray-600 text-xs mt-8 max-w-md">💡 {fact}</p>
+        </div>
+    )
+}
+
+function UpdateNotification({ onRestart }) {
+    return (
+        <motion.div initial={{y: 50, opacity: 0}} animate={{y: 0, opacity: 1}} className="absolute bottom-6 left-20 z-[9999] bg-green-600/90 backdrop-blur-md p-3 rounded-xl shadow-2xl border border-green-400 w-64">
+            <div className="flex items-start gap-3">
+                <div className="p-2 bg-white/20 rounded-full"><DownloadCloud size={20} className="text-white"/></div>
+                <div>
+                    <h4 className="font-bold text-white text-sm">Обновление готово!</h4>
+                    <p className="text-[11px] text-green-100 leading-tight my-1">Новая версия загружена.</p>
+                    <button onClick={onRestart} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors flex items-center justify-center gap-2"><RefreshCw size={12}/> Перезапустить</button>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
 
 const Input = ({ label, value, onChange, type="text", required=false, errorMsg, className }) => (
     <div className={`mb-4 ${className}`}>
@@ -202,6 +236,24 @@ function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localS
             )}
         </div>
     )
+}
+
+function TitleBar() {
+  if (!ipcRenderer) return null;
+  return (
+    <div className="h-8 bg-[#000] flex items-center justify-between select-none w-full border-b border-white/10 z-[9999] fixed top-0 left-0 right-0 drag-region">
+       <div className="flex items-center gap-2 px-3 no-drag">
+           <div className="w-3 h-3 bg-[var(--primary)] rounded-full flex items-center justify-center font-black text-[6px] text-white">T</div>
+           <span className="text-[10px] font-black text-gray-500 tracking-[0.2em] uppercase">TalkSpace</span>
+       </div>
+       <div className="flex h-full no-drag">
+           <button onClick={() => ipcRenderer.send('app-minimize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Minus size={14} /></button>
+           <button onClick={() => ipcRenderer.send('app-maximize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Square size={12} /></button>
+           <button onClick={() => ipcRenderer.send('app-close')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-red-500 hover:text-white transition-colors"><X size={14} /></button>
+       </div>
+       <style>{`.drag-region { -webkit-app-region: drag; } .no-drag { -webkit-app-region: no-drag; }`}</style>
+    </div>
+  );
 }
 
 // --- MAIN APP ---
@@ -490,7 +542,7 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
         <div style={{ top: y, left: x }} className="fixed bg-[#111] border border-black/50 rounded-[4px] shadow-[0_8px_16px_rgba(0,0,0,0.5)] z-[9999] py-1.5 w-56 font-medium text-xs text-gray-300" onMouseLeave={close}>
             {type === 'server' && (
                 <>
-                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить</button>
+                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить людей</button>
                     <div className="h-[1px] bg-white/10 my-1"/>
                     {data.owner === user._id ? (
                         <button onClick={deleteS} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сервер</button>
@@ -504,14 +556,14 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
                     <button onClick={replyMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Reply size={14}/> Ответить</button>
                     <button onClick={copyText} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Copy size={14}/> Копировать текст</button>
                     <button onClick={pinMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Pin size={14}/> {data.isPinned ? 'Открепить' : 'Закрепить'}</button>
+                    <div className="h-[1px] bg-white/10 my-1"/>
                     {data.senderId === user._id && (
                         <>
-                            <button onClick={editMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Edit2 size={14}/> Изменить</button>
+                            <button onClick={editMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Edit2 size={14}/> Редактировать сообщение</button>
+                            <button onClick={deleteMsg} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сообщение</button>
                             <div className="h-[1px] bg-white/10 my-1"/>
-                            <button onClick={deleteMsg} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить</button>
                         </>
                     )}
-                    <div className="h-[1px] bg-white/10 my-1"/>
                     <button onClick={copyId} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2">Копировать ID</button>
                 </>
             )}
@@ -712,10 +764,17 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                  </div>
                              </div>
                              {/* Hover Actions (Only Reply & React) */}
-                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-sm p-1 rounded border border-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
-                                 <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
-                                 <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Ответить"><Reply size={16}/></button>
+                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-[0_2px_4px_rgba(0,0,0,0.2)] p-1 rounded border border-[#2B2D31] flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                 <button onClick={()=>onReact(m._id, '❤️')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Нравится">❤️</button>
+                                 <button onClick={()=>onReact(m._id, '😂')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Смешно">😂</button>
+                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Супер">👍</button>
+                                 
+                                 <div className="w-[1px] h-4 bg-white/10 mx-1"/>
+                                 
+                                 <button onClick={()=>onReact(m._id, '➕')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Добавить реакцию"><Smile size={18}/></button>
+                                 <button onClick={()=>onReply(m)} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Ответить"><Reply size={18}/></button>
+                                 <button className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Переслать"><ArrowUpCircle size={18}/></button>
+                                 <button onClick={(e)=>onContextMenu(e, m)} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Ещё"><MoreVertical size={18}/></button>
                              </div>
                         </div>
                     )
@@ -746,8 +805,6 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  
-  // Context Menu State
   const [ctxMenu, setCtxMenu] = useState(null);
   
   const friend = activeChat?.members?.find(m => m._id !== user._id);
@@ -765,7 +822,6 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
     socket.on('message_update', (d) => setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)));
     socket.on('message_delete', (d) => setMessages(p => p.filter(m => m._id !== d.msgId)));
     
-    // Typing
     socket.on('user_typing', (u) => setTyping(p => [...new Set([...p, u])]));
     socket.on('user_stop_typing', (u) => setTyping(p => p.filter(n => n !== u)));
 
@@ -785,11 +841,9 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
   const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { chatId: activeChat._id, msgId, isPinned });
 
-  const typingTimeout = useRef();
   const handleType = () => {
       socket.emit('typing', { room: activeChat._id, user: user.displayName });
-      clearTimeout(typingTimeout.current);
-      typingTimeout.current = setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
+      setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
   };
 
   const startCall = async (withVideo) => {
@@ -822,17 +876,46 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
       callSound.pause(); callSound.currentTime = 0;
       setCallActive(false); setLocalStream(null); setRemoteStream(null); setIsIncoming(null); setIsScreenOn(false); setFullScreen(false);
   };
-  const toggleMic = () => { if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } } };
-  const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
-  const shareScreen = async () => { if(!isScreenOn) { try { const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const st = ss.getVideoTracks()[0]; const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); if(sender) sender.replaceTrack(st); else peerRef.current.peerConnection.addTrack(st, localStream); st.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true); } catch(e) {} } };
+  const toggleMic = () => { 
+      if(localStream) { 
+          const track = localStream.getAudioTracks()[0]; 
+          if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } 
+      } 
+  };
+  const toggleCam = async () => { 
+      if (isCamOn) { 
+          localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); 
+      } else { 
+          try { 
+              const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); 
+              const vt = vs.getVideoTracks()[0]; 
+              localStream.addTrack(vt); 
+              const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); 
+              if (sender) sender.replaceTrack(vt); 
+              else peerRef.current.peerConnection.addTrack(vt, localStream); 
+              setIsCamOn(true); 
+          } catch(e) { alert("Камера не найдена"); } 
+      } 
+  };
+  const shareScreen = async () => { 
+      if(!isScreenOn) { 
+          try { 
+              const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); 
+              const st = ss.getVideoTracks()[0]; 
+              const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); 
+              if(sender) sender.replaceTrack(st); 
+              else peerRef.current.peerConnection.addTrack(st, localStream); 
+              st.onended = () => { setIsScreenOn(false); }; 
+              setIsScreenOn(true); 
+          } catch(e) {} 
+      } 
+  };
 
-  // Drag & Drop
   const onDrop = async (e) => {
       e.preventDefault(); setIsDragging(false);
       if(e.dataTransfer.files[0]) {
           const imageFile = e.dataTransfer.files[0];
           let uploadFile = imageFile;
-          // Compress if image
           if(imageFile.type.startsWith('image/')) {
              try { uploadFile = await imageCompression(imageFile, { maxSizeMB: 1, useWebWorker: true }); } catch(e){}
           }
