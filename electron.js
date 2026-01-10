@@ -1,16 +1,15 @@
-const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const url = require('url');
+const log = require('electron-log');
 
-// --- SQUIRREL SETUP ---
+// Настройка логирования
+log.transports.file.level = 'info';
+autoUpdater.logger = log;
+
+// --- SQUIRREL SETUP (Важно для корректной установки/удаления/обновления) ---
 if (require('electron-squirrel-startup')) return app.quit();
-
-// Логирование
-autoUpdater.logger = require("electron-log");
-autoUpdater.logger.transports.file.level = "info";
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
 
 let mainWindow;
 let splashWindow;
@@ -24,7 +23,6 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {
-    // Пользователь пытался запустить вторую копию
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
@@ -48,8 +46,12 @@ if (!gotTheLock) {
     createSplashWindow();
     
     if (app.isPackaged) {
-        autoUpdater.checkForUpdates();
-        setInterval(() => autoUpdater.checkForUpdates(), 1000 * 60 * 5); 
+        // Проверяем обновления через 3 секунды после запуска
+        setTimeout(() => {
+            autoUpdater.checkForUpdates();
+        }, 3000);
+        // И далее каждые 10 минут
+        setInterval(() => autoUpdater.checkForUpdates(), 1000 * 60 * 10); 
     } else {
         setTimeout(createMainWindow, 1500);
     }
@@ -101,7 +103,6 @@ function createMainWindow() {
     if (!isQuitting) { event.preventDefault(); mainWindow.hide(); return false; }
   });
   
-  // Open links in external browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       shell.openExternal(url);
       return { action: 'deny' };
@@ -129,17 +130,48 @@ ipcMain.on('app-minimize', () => mainWindow?.minimize());
 ipcMain.on('app-maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
 ipcMain.on('app-close', () => mainWindow?.close());
 ipcMain.on('flash-frame', () => { if(mainWindow && !mainWindow.isFocused()) mainWindow.flashFrame(true); });
+
 ipcMain.on('restart_app', () => { isQuitting = true; autoUpdater.quitAndInstall(); });
+
+// Ручная проверка обновлений из настроек
+ipcMain.on('check-for-updates-manual', () => {
+    if(app.isPackaged) {
+        autoUpdater.checkForUpdates();
+    }
+});
 
 ipcMain.on('get-auto-launch-status', (event) => { const settings = app.getLoginItemSettings(); event.reply('auto-launch-status', settings.openAtLogin); });
 ipcMain.on('toggle-auto-launch', (event, enable) => { app.setLoginItemSettings({ openAtLogin: enable, path: process.execPath }); });
 
 function sendStatusToSplash(text) { if (splashWindow) splashWindow.webContents.send('message', text); }
-autoUpdater.on('checking-for-update', () => sendStatusToSplash('Checking...'));
-autoUpdater.on('update-available', () => sendStatusToSplash('Update found...'));
-autoUpdater.on('update-not-available', () => { sendStatusToSplash('Starting...'); setTimeout(createMainWindow, 1000); });
-autoUpdater.on('error', (err) => { sendStatusToSplash('Ready'); setTimeout(createMainWindow, 1000); });
-autoUpdater.on('download-progress', (p) => { sendStatusToSplash(`DL: ${Math.round(p.percent)}%`); });
-autoUpdater.on('update-downloaded', () => { sendStatusToSplash('Ready'); if(mainWindow) mainWindow.webContents.send('update_downloaded'); });
+
+// --- AUTO UPDATER EVENTS ---
+autoUpdater.on('checking-for-update', () => {
+    sendStatusToSplash('Checking...');
+    log.info('Checking for update...');
+});
+autoUpdater.on('update-available', (info) => {
+    sendStatusToSplash('Update found...');
+    log.info('Update available:', info);
+    if(mainWindow) mainWindow.webContents.send('update_available_info', info.version);
+});
+autoUpdater.on('update-not-available', () => {
+    sendStatusToSplash('Starting...');
+    log.info('Update not available.');
+    if(!mainWindow) setTimeout(createMainWindow, 1000);
+});
+autoUpdater.on('error', (err) => {
+    sendStatusToSplash('Ready');
+    log.error('Update error:', err);
+    if(!mainWindow) setTimeout(createMainWindow, 1000);
+});
+autoUpdater.on('download-progress', (p) => {
+    sendStatusToSplash(`DL: ${Math.round(p.percent)}%`);
+});
+autoUpdater.on('update-downloaded', () => {
+    sendStatusToSplash('Ready');
+    log.info('Update downloaded');
+    if(mainWindow) mainWindow.webContents.send('update_downloaded');
+});
 
 app.on('window-all-closed', () => {});

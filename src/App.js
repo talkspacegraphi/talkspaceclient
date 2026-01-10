@@ -17,7 +17,8 @@ import {
   Menu, Camera, Smile, Reply, Hash, LogOut, Minus, Square, 
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
   AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
-  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle, Copy, MoreVertical
+  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle, Copy, MoreVertical,
+  ArrowUpCircle
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
@@ -75,6 +76,13 @@ const StatusDot = ({ status, size = "w-3 h-3" }) => {
     const color = status === 'online' ? 'bg-green-500' : status === 'dnd' ? 'bg-red-500' : 'bg-yellow-500';
     return <div className={`${size} rounded-full ${color} border-[2px] border-[#000] absolute -bottom-0.5 -right-0.5`} />;
 };
+
+const BackgroundEffect = () => (
+    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] animate-[spin_100s_linear_infinite]"/>
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[var(--primary)]/10 to-transparent"/>
+    </div>
+);
 
 const Input = ({ label, value, onChange, type="text", required=false, errorMsg, className }) => (
     <div className={`mb-4 ${className}`}>
@@ -859,16 +867,16 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
     useEffect(() => {
         if(serverId) {
             axios.get(`${SERVER_URL}/api/server/${serverId}`).then(res => {
-               // Assuming logic needs full refresh, but socket events usually handle this.
+               const s = res.data;
+               const c = s.channels.find(ch => ch._id === channelId);
+               if(c) setMessages(c.messages);
             });
         }
-    }, [serverId]);
+    }, [serverId, channelId]);
 
     useEffect(() => { 
         socket.emit('join_server_room', serverId); 
-        const currentChannel = user?.servers?.find(s => s._id === serverId)?.channels?.find(c => c._id === channelId);
-        setMessages(currentChannel?.messages || []); 
-    }, [channelId, serverId, user]); 
+    }, [channelId, serverId]);
 
     useEffect(() => {
         const onMsg = (m) => { if(m.channelId === channelId) setMessages(p => [...p, m]); };
@@ -1179,10 +1187,82 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                 <div className="h-[1px] bg-white/5"/>
                 <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>
                 <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}
+                
+                <div className="h-[1px] bg-white/5"/>
+                <div className="flex justify-between items-center bg-green-900/30 p-4 rounded-xl border border-green-500/30">
+                    <div>
+                        <h4 className="font-bold text-green-400">Обновления</h4>
+                        <p className="text-xs text-gray-400">Текущая версия: 1.0.7</p>
+                    </div>
+                    <button onClick={() => ipcRenderer.send('check-for-updates-manual')} className="bg-green-600 px-4 py-2 rounded text-xs font-bold hover:bg-green-500 transition-colors">Проверить</button>
+                </div>
             </div>
             <div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div>
         </>
     )}
     
     </div></motion.div></div>);
+}
+
+// --- AUTH COMPONENT (SAME AS BEFORE) ---
+function Auth({ onAuth }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [loginData, setLoginData] = useState({ login: '', password: '' });
+  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
+  const [usernameStatus, setUsernameStatus] = useState(null); 
+  const [error, setError] = useState("");
+
+  useEffect(() => { if(isLogin || !regData.username) return; const timeout = setTimeout(async () => { try { const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username }); setUsernameStatus(res.data.available ? 'free' : 'taken'); } catch(e) {} }, 500); return () => clearTimeout(timeout); }, [regData.username, isLogin]);
+  const handleLogin = async () => { try { const res = await axios.post(`${SERVER_URL}/api/login`, loginData); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); } };
+  const handleRegister = async () => { try { if(usernameStatus !== 'free') return setError("Имя пользователя занято"); if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения"); const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } }); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); } };
+
+  return (
+    <div className="h-screen flex items-center justify-center relative bg-[#000] overflow-hidden drag-region">
+      <div className="absolute inset-0 bg-black">
+          <div className="absolute top-[-20%] left-[-20%] w-[50vw] h-[50vw] bg-blue-900/20 rounded-full blur-[120px]"/>
+          <div className="absolute bottom-[-20%] right-[-20%] w-[50vw] h-[50vw] bg-purple-900/20 rounded-full blur-[120px]"/>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
+      </div>
+
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#050505]/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-[420px] z-10 relative border border-white/10 no-drag">
+        <div className="text-center mb-8">
+            <h1 className="text-3xl font-black text-white tracking-tight">TALKSPACE</h1>
+            <p className="text-gray-500 text-xs tracking-[0.2em] mt-1 font-bold">SECURE COMMUNICATION UPLINK</p>
+        </div>
+
+        {isLogin ? (
+            <>
+                <Input label="Логин" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})} className="mb-6"/>
+                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
+                <button onClick={handleLogin} className="w-full bg-white hover:bg-gray-200 text-black font-black py-3 rounded-[4px] transition-all mb-4 mt-6 uppercase tracking-wider text-xs">Войти в систему</button>
+                <div className="text-xs text-center text-gray-500">Нет аккаунта? <span onClick={()=>setIsLogin(false)} className="text-white cursor-pointer hover:underline font-bold">Создать ID</span></div>
+            </>
+        ) : (
+            <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
+                <Input label="Никнейм" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
+                
+                <div className="mb-4">
+                    <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>ID (Логин) *</label>
+                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className={`w-full bg-[#111] border ${usernameStatus === 'free' ? 'border-green-500/50' : 'border-white/10'} p-2.5 rounded-[3px] text-white outline-none text-sm transition-all`} />
+                </div>
+                
+                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
+                
+                <div className="mb-6">
+                    <label className="block text-[11px] font-bold uppercase text-gray-400 mb-2">Дата рождения</label>
+                    <div className="flex gap-2">
+                        <div className="w-[30%]"><CustomSelect placeholder="ДД" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
+                        <div className="w-[40%]"><CustomSelect placeholder="ММ" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
+                        <div className="w-[30%]"><CustomSelect placeholder="ГГГГ" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
+                    </div>
+                </div>
+                <button onClick={handleRegister} className="w-full bg-white hover:bg-gray-200 text-black font-black py-3 rounded-[4px] transition-all mt-4 uppercase tracking-wider text-xs">Инициализация</button>
+                <div className="text-xs text-gray-500 mt-4 cursor-pointer hover:underline font-bold text-center" onClick={()=>{setIsLogin(true); setError("")}}>Вернуться к входу</div>
+            </div>
+        )}
+        {error && <div className="mt-4 bg-red-900/20 border border-red-500/50 text-red-200 p-3 rounded text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
+      </motion.div>
+    </div>
+  );
 }

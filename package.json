@@ -1,6 +1,6 @@
 {
   "name": "talkspace",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": false,
   "main": "electron.js",
   "homepage": "./",
@@ -8,7 +8,7 @@
   "author": "Graphi",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/talkspacegraphi/talkspaceclient.git"
+    "url": "https://github.com/talkspacegraphi/talkspaceclient"
   },
   "dependencies": {
     "axios": "^1.6.8",
@@ -40,7 +40,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "electron-dev": "electron .",
-    "dist": "react-scripts build && electron-builder"
+    "dist": "react-scripts build && electron-builder",
+    "publish": "react-scripts build && electron-builder --publish always"
   },
   "build": {
     "extends": null,
@@ -71,7 +72,10 @@
       "target": [
         "squirrel"
       ],
-      "icon": "public/favicon.ico"
+      "icon": "public/favicon.ico",
+      "publish": [
+        "github"
+      ]
     },
     "squirrelWindows": {
       "iconUrl": "https://github.com/talkspacegraphi/talkspaceclient/blob/main/public/favicon.ico?raw=true",
