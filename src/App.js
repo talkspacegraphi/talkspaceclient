@@ -758,36 +758,5 @@ function Auth({ onAuth }) {
         {error && <div className="mt-4 bg-red-500/10 border border-red-500 text-white p-3 rounded-xl text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
       </motion.div>
     </div>
-  );
-}
-
-// --- HELPER UI ---
-const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
-    <div className="mb-4">
-        <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-[#B5BAC1]'}`}>
-            {label} {required && <span className="text-red-400">*</span>} {errorMsg && <span className="italic normal-case ml-1 font-medium">- {errorMsg}</span>}
-        </label>
-        <input type={type} value={value} onChange={onChange} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-[15px] h-10 transition-all focus:bg-[#1E1F22] focus:ring-0 font-medium" />
-    </div>
-);
-
-const CustomSelect = ({ options, value, onChange, placeholder }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const ref = useRef(null);
-    useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
-    return (
-        <div className="relative w-full" ref={ref}>
-            <div onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white text-[15px] h-10 flex items-center justify-between cursor-pointer border border-transparent hover:border-[#0B0B0C] transition-colors ${isOpen ? 'rounded-b-none' : ''}`}>
-                <span className={`${!value ? 'text-[#949BA4]' : 'text-white'}`}>{value || placeholder}</span>
-                {isOpen ? <ChevronUp size={16} className="text-[#949BA4]"/> : <ChevronDown size={16} className="text-[#949BA4]"/>}
-            </div>
-            {isOpen && (
-                <div className="absolute top-full left-0 right-0 bg-[#2B2D31] border border-[#1E1F22] border-t-0 max-h-48 overflow-y-auto z-50 rounded-b-[3px] shadow-xl custom-scrollbar">
-                    {options.map((opt, i) => (
-                        <div key={i} onClick={() => { onChange(opt); setIsOpen(false); }} className="p-2 text-[15px] text-[#DBDEE1] hover:bg-[#404249] hover:text-white cursor-pointer transition-colors">{opt}</div>
-                    ))}
-                </div>
-            )}
-        </div>
     );
 };
