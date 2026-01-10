@@ -1,11 +1,15 @@
 {
   "name": "talkspace",
   "version": "1.0.1",
-  "private": true,
+  "private": false,
   "main": "electron.js",
   "homepage": "./",
   "description": "TalkSpace Messenger",
   "author": "Graphi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/talkspacegraphi/talkspaceclient.git"
+  },
   "dependencies": {
     "axios": "^1.13.2",
     "electron-log": "^5.1.2",
@@ -65,13 +69,14 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "TalkSpace"
+      "shortcutName": "TalkSpace",
+      "deleteAppDataOnUninstall": true
     },
     "publish": [
       {
         "provider": "github",
-        "owner": "talkspacegraphi", 
-        "repo": "ТВОЙ_REPO_NAME"
+        "owner": "talkspacegraphi",
+        "repo": "talkspaceclient"
       }
     ],
     "asar": true
