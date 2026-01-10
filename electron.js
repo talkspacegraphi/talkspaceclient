@@ -21,7 +21,6 @@ let isQuitting = false;
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  console.log("Another instance is already running. Quitting...");
   app.quit();
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {

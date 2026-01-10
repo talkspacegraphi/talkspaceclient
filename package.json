@@ -1,6 +1,6 @@
 {
   "name": "talkspace",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "private": false,
   "main": "electron.js",
   "homepage": "./",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "axios": "^1.6.8",
+    "browser-image-compression": "^2.0.2",
     "electron-log": "^5.1.2",
     "electron-squirrel-startup": "^1.0.0",
     "electron-updater": "^6.1.8",
@@ -26,6 +27,7 @@
     "react-router-dom": "^6.22.3",
     "react-scripts": "5.0.1",
     "react-syntax-highlighter": "^15.5.0",
+    "react-virtuoso": "^4.7.1",
     "remark-gfm": "^4.0.0",
     "socket.io-client": "^4.7.5",
     "web-vitals": "^2.1.4"

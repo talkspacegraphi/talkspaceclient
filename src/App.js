@@ -9,13 +9,15 @@ import remarkGfm from 'remark-gfm';
 import EmojiPicker from 'emoji-picker-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/cjs/styles/prism';
+import { Virtuoso } from 'react-virtuoso';
+import imageCompression from 'browser-image-compression';
 import { 
   Users, MessageSquare, Check, X, Settings, Mic, MicOff, 
   Monitor, Send, Phone, PhoneOff, Video, VideoOff, Plus, 
   Menu, Camera, Smile, Reply, Hash, LogOut, Minus, Square, 
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
   AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
-  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle
+  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle, Copy, MoreVertical
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
@@ -61,10 +63,13 @@ const GlobalStyles = () => (
             transition: background-color 5000s ease-in-out 0s;
         }
         .code-block { font-family: 'Consolas', monospace; font-size: 13px; }
+        .drag-overlay { background: rgba(88, 101, 242, 0.2); border: 2px dashed #5865F2; backdrop-filter: blur(2px); }
+        .mention { background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 2px; border-radius: 3px; font-weight: 500; cursor: pointer; }
+        .mention:hover { background: rgba(88, 101, 242, 0.6); }
     `}</style>
 );
 
-// --- GLOBAL COMPONENTS (Fixes ReferenceError) ---
+// --- GLOBAL COMPONENTS ---
 
 const StatusDot = ({ status, size = "w-3 h-3" }) => {
     const color = status === 'online' ? 'bg-green-500' : status === 'dnd' ? 'bg-red-500' : 'bg-yellow-500';
@@ -113,6 +118,20 @@ const CustomSelect = ({ options, value, onChange, placeholder }) => {
         </div>
     );
 };
+
+const Lightbox = ({ src, onClose }) => {
+    if (!src) return null;
+    return (
+        <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center" onClick={onClose}>
+            <img src={src} className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl rounded-lg" onClick={e => e.stopPropagation()} />
+            <button className="absolute top-4 right-4 text-white hover:text-gray-300"><X size={32}/></button>
+        </div>
+    )
+}
+
+const Skeleton = ({ className }) => (
+    <div className={`animate-pulse bg-gray-700/50 rounded ${className}`}/>
+)
 
 // --- MAIN UI COMPONENTS ---
 
@@ -232,6 +251,8 @@ function MainLayout({ user, setUser, onLogout }) {
   const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('noiseSuppression') === 'true');
   const [pttKey, setPttKey] = useState(localStorage.getItem('pttKey') || 'Space');
   const [pttEnabled, setPttEnabled] = useState(localStorage.getItem('pttEnabled') === 'true');
+  const [selectedMic, setSelectedMic] = useState(localStorage.getItem('selectedMic') || '');
+  const [selectedCam, setSelectedCam] = useState(localStorage.getItem('selectedCam') || '');
 
   const refresh = useCallback(async () => {
     try {
@@ -298,8 +319,8 @@ function MainLayout({ user, setUser, onLogout }) {
       <div className="flex-1 flex flex-col bg-[#0B0B0C] relative min-w-0 z-10">
         <Routes>
           <Route path="/friends" element={<FriendsView user={user} refresh={refresh} />} />
-          <Route path="/chat/:friendId" element={<ChatView user={user} noiseSuppression={noiseSuppression} />} />
-          <Route path="/server/:serverId" element={<ServerView user={user} noiseSuppression={noiseSuppression} pttEnabled={pttEnabled} pttKey={pttKey} />} />
+          <Route path="/chat/:friendId" element={<ChatView user={user} noiseSuppression={noiseSuppression} selectedMic={selectedMic} selectedCam={selectedCam} />} />
+          <Route path="/server/:serverId" element={<ServerView user={user} noiseSuppression={noiseSuppression} pttEnabled={pttEnabled} pttKey={pttKey} selectedMic={selectedMic} />} />
           <Route path="*" element={<Navigate to="/friends" />} />
         </Routes>
       </div>
@@ -317,7 +338,7 @@ function MainLayout({ user, setUser, onLogout }) {
       )}
 
       <AnimatePresence>
-        {showSettings && <SettingsModal user={user} setUser={setUser} onClose={() => setShowSettings(false)} onLogout={onLogout} noise={noiseSuppression} setNoise={setNoiseSuppression} ptt={pttEnabled} setPtt={setPttEnabled} pttKey={pttKey} setPttKey={setPttKey} />}
+        {showSettings && <SettingsModal user={user} setUser={setUser} onClose={() => setShowSettings(false)} onLogout={onLogout} noise={noiseSuppression} setNoise={setNoiseSuppression} ptt={pttEnabled} setPtt={setPttEnabled} pttKey={pttKey} setPttKey={setPttKey} selectedMic={selectedMic} setSelectedMic={setSelectedMic} selectedCam={selectedCam} setSelectedCam={setSelectedCam} />}
         {createSeverModal && <CreateServerModal user={user} onClose={() => setCreateServerModal(false)} refresh={refresh} />}
       </AnimatePresence>
     </div>
@@ -334,7 +355,7 @@ const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu,
             </div>
           </button>
           <div className="mt-4 mb-1 px-3 text-[11px] font-bold text-[#949BA4] uppercase tracking-wide flex items-center justify-between select-none hover:text-[#DBDEE1]"><span>Личные сообщения</span> <Plus size={14} className="cursor-pointer"/></div>
-          {user?.chats?.map(c => {
+          {user?.chats?.length > 0 ? user.chats.map(c => {
             const f = c.members.find(m => m._id !== user._id);
             if (!f) return null;
             return (
@@ -343,7 +364,13 @@ const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu,
                 <div className="flex-1 overflow-hidden leading-tight"><p className="truncate text-[15px] font-medium group-hover:text-[#DBDEE1] transition-colors">{f.displayName || f.username}</p><p className="text-[12px] opacity-70 truncate">{f.status}</p></div>
               </div>
             );
-          })}
+          }) : (
+              <div className="px-3">
+                  <Skeleton className="h-10 w-full mb-1"/>
+                  <Skeleton className="h-10 w-full mb-1"/>
+                  <Skeleton className="h-10 w-full mb-1"/>
+              </div>
+          )}
         </div>
         <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} />
     </>
@@ -455,7 +482,15 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
 
     const handleFile = async (e) => {
         if(e.target.files[0]) {
-            const fd = new FormData(); fd.append('file', e.target.files[0]);
+            // COMPRESSION
+            const imageFile = e.target.files[0];
+            const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
+            let uploadFile = imageFile;
+            try {
+                if(imageFile.type.startsWith('image/')) uploadFile = await imageCompression(imageFile, options);
+            } catch(e) { console.log(e); }
+
+            const fd = new FormData(); fd.append('file', uploadFile);
             const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
             onUpload(res.data.url, 'image');
         }
@@ -516,97 +551,130 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
 }
 
 function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply, setEditMsg }) {
-    const bottomRef = useRef();
-    useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+    const [lightboxImage, setLightboxImage] = useState(null);
 
-    const Message = ({ m }) => {
-        const isMe = m.senderId === user._id;
-        const [context, setContext] = useState(null);
-        // New Message Separator (Dummy logic for now, assumes anything < 5 mins ago is new)
-        const isNew = (new Date() - new Date(m.createdAt)) < 5 * 60 * 1000 && !isMe;
+    // Grouping Logic is handled inside itemContent of Virtuoso
+    return (
+        <div className="flex-1 overflow-hidden flex flex-col pb-0">
+            {lightboxImage && <Lightbox src={lightboxImage} onClose={()=>setLightboxImage(null)} />}
+            <Virtuoso
+                data={messages}
+                initialTopMostItemIndex={messages.length - 1}
+                followOutput="auto"
+                className="custom-scrollbar"
+                itemContent={(index, m) => {
+                    const prevMsg = messages[index - 1];
+                    const isSameSender = prevMsg && prevMsg.senderId === m.senderId;
+                    const isCloseTime = prevMsg && (new Date(m.createdAt) - new Date(prevMsg.createdAt) < 2 * 60 * 1000);
+                    const showHeader = !isSameSender || !isCloseTime;
+                    const isMe = m.senderId === user._id;
+                    const isNew = (new Date() - new Date(m.createdAt)) < 5 * 60 * 1000 && !isMe;
 
-        return (
-            <>
-            {isNew && <div className="flex items-center my-2"><div className="h-[1px] bg-red-500 flex-1"/><span className="text-[10px] text-red-500 font-bold px-2 uppercase">New</span><div className="h-[1px] bg-red-500 flex-1"/></div>}
-            <div className={`group flex gap-4 px-4 py-2 hover:bg-[#111]/50 relative ${m.isPinned ? 'bg-yellow-900/10' : ''}`} onContextMenu={e=>{e.preventDefault(); setContext({x:e.clientX,y:e.clientY})}} onMouseLeave={()=>setContext(null)}>
-                {m.replyTo && (
-                    <div className="absolute -top-3 left-14 flex items-center gap-1 opacity-60 text-xs">
-                        <div className="w-8 h-2 border-t-2 border-l-2 border-gray-500 rounded-tl-md mt-2"/>
-                        <span className="font-bold text-gray-400">@{m.replyTo.senderName}</span>
-                        <span className="text-gray-500 truncate max-w-[200px]">{m.replyTo.text}</span>
-                    </div>
-                )}
-                <img src={m.senderAvatar} className="w-10 h-10 rounded-full bg-zinc-800 object-cover mt-1 cursor-pointer hover:opacity-80" alt="av" />
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-bold text-white cursor-pointer hover:underline">{m.senderName}</span>
-                        <span className="text-[11px] text-[#949BA4]">{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                        {m.isPinned && <Pin size={12} className="text-red-400 rotate-45" />}
-                    </div>
-                    {m.type === 'image' ? (
-                        <img src={m.fileUrl} className="max-w-[400px] max-h-[300px] rounded-lg shadow-lg border border-white/5" alt="attachment"/>
-                    ) : m.type === 'audio' ? (
-                        <div className="bg-[#2B2D31] p-2 rounded flex items-center gap-3 w-64 border border-white/10">
-                            <div className="p-2 bg-[var(--primary)] rounded-full"><Play size={16} className="text-white"/></div>
-                            <audio controls src={m.fileUrl} className="w-full h-8"/>
+                    return (
+                        <div className="px-4 py-0.5 hover:bg-[#111]/50 relative group pr-16">
+                             {isNew && showHeader && <div className="flex items-center my-2"><div className="h-[1px] bg-red-500 flex-1"/><span className="text-[10px] text-red-500 font-bold px-2 uppercase">New</span><div className="h-[1px] bg-red-500 flex-1"/></div>}
+                             
+                             <div className={`flex gap-4 ${!showHeader ? 'mt-0' : 'mt-4'}`}>
+                                 {showHeader ? (
+                                     <img src={m.senderAvatar} className="w-10 h-10 rounded-full bg-zinc-800 object-cover cursor-pointer hover:opacity-80" alt="av" />
+                                 ) : (
+                                     <div className="w-10 text-[10px] text-gray-600 text-right opacity-0 group-hover:opacity-100 select-none pt-1">
+                                         {new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                                     </div>
+                                 )}
+
+                                 <div className="flex-1 min-w-0">
+                                     {showHeader && (
+                                         <div className="flex items-center gap-2 mb-0.5">
+                                             <span className="font-bold text-white cursor-pointer hover:underline">{m.senderName}</span>
+                                             <span className="text-[11px] text-[#949BA4]">{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                             {m.isPinned && <Pin size={12} className="text-red-400 rotate-45" />}
+                                         </div>
+                                     )}
+                                     
+                                     {m.replyTo && showHeader && (
+                                        <div className="flex items-center gap-1 opacity-60 text-xs mb-1">
+                                            <div className="w-4 h-2 border-t-2 border-l-2 border-gray-500 rounded-tl-md"/>
+                                            <span className="font-bold text-gray-400">@{m.replyTo.senderName}</span>
+                                            <span className="text-gray-500 truncate max-w-[200px]">{m.replyTo.text}</span>
+                                        </div>
+                                     )}
+
+                                     <div className="text-[#DBDEE1]">
+                                         {m.type === 'image' ? (
+                                             <img onClick={()=>setLightboxImage(m.fileUrl)} src={m.fileUrl} className="max-w-[300px] max-h-[300px] rounded-lg shadow-lg border border-white/5 cursor-zoom-in" alt="attachment"/>
+                                         ) : m.type === 'audio' ? (
+                                             <div className="bg-[#2B2D31] p-2 rounded flex items-center gap-3 w-64 border border-white/10">
+                                                 <div className="p-2 bg-[var(--primary)] rounded-full"><Play size={16} className="text-white"/></div>
+                                                 <audio controls src={m.fileUrl} className="w-full h-8"/>
+                                             </div>
+                                         ) : (
+                                             <div className="text-[15px] leading-relaxed break-words markdown-body">
+                                                 <ReactMarkdown 
+                                                    remarkPlugins={[remarkGfm]} 
+                                                    components={{
+                                                        code({node, inline, className, children, ...props}) {
+                                                            const match = /language-(\w+)/.exec(className || '')
+                                                            return !inline && match ? (
+                                                            <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter>
+                                                            ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>)
+                                                        },
+                                                        // Mention highlighting
+                                                        p: ({children}) => {
+                                                            if (typeof children === 'string' && children.includes('@')) {
+                                                                // Very basic regex replacement for display
+                                                                return <p>{children}</p> // ReactMarkdown handles children complexly, simplified for stability
+                                                            }
+                                                            return <p>{children}</p>
+                                                        }
+                                                    }}
+                                                 >
+                                                     {m.text}
+                                                 </ReactMarkdown>
+                                                 {m.isEdited && <span className="text-[10px] text-gray-500 ml-1">(изм.)</span>}
+                                             </div>
+                                         )}
+                                     </div>
+
+                                     {m.ogData && (
+                                         <div className="mt-2 border-l-4 border-[var(--primary)] bg-[#1E1F22] rounded p-2 max-w-md">
+                                             <h4 className="font-bold text-[#00A8FC] hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
+                                             <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
+                                             {m.ogData.image && <img src={m.ogData.image} className="mt-2 rounded max-h-40 object-cover w-full" alt="preview"/>}
+                                         </div>
+                                     )}
+
+                                     {m.reactions?.length > 0 && (
+                                         <div className="flex gap-1 mt-1 flex-wrap">
+                                             {m.reactions.map((r, i) => (
+                                                 <div key={i} onClick={()=>onReact(m._id, r.emoji)} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] cursor-pointer border ${r.users.includes(user._id) ? 'bg-[#3b405a] border-[var(--primary)]' : 'bg-[#2B2D31] border-transparent hover:border-gray-500'}`}>
+                                                     <span className="text-sm">{r.emoji}</span><span className="text-xs font-bold text-[#B5BAC1]">{r.count}</span>
+                                                 </div>
+                                             ))}
+                                         </div>
+                                     )}
+                                 </div>
+                             </div>
+
+                             {/* Context Menu / Actions */}
+                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-sm p-1 rounded border border-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
+                                 <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
+                                 <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Ответить"><Reply size={16}/></button>
+                                 {isMe && <button onClick={()=>setEditMsg(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Изменить"><Edit2 size={16}/></button>}
+                                 {isMe && <button onClick={()=>onDelete(m._id)} className="p-1 hover:bg-[#404249] rounded text-red-400 hover:text-red-500" title="Удалить"><Trash size={16}/></button>}
+                                 <button onClick={()=>{navigator.clipboard.writeText(m.text || m.fileUrl)}} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Копировать"><Copy size={16}/></button>
+                                 <button onClick={()=>onPin(m._id, !m.isPinned)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Закрепить"><Pin size={16}/></button>
+                             </div>
                         </div>
-                    ) : (
-                        <div className="text-[#DBDEE1] text-[15px] leading-relaxed break-words markdown-body">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
-                                code({node, inline, className, children, ...props}) {
-                                    const match = /language-(\w+)/.exec(className || '')
-                                    return !inline && match ? (
-                                    <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter>
-                                    ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>)
-                                }
-                            }}>{m.text}</ReactMarkdown>
-                            {m.isEdited && <span className="text-[10px] text-gray-500 ml-1">(изм.)</span>}
-                        </div>
-                    )}
-                    
-                    {/* Link Preview */}
-                    {m.ogData && (
-                        <div className="mt-2 border-l-4 border-[var(--primary)] bg-[#1E1F22] rounded p-2 max-w-md">
-                            <h4 className="font-bold text-[#00A8FC] hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
-                            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
-                            {m.ogData.image && <img src={m.ogData.image} className="mt-2 rounded max-h-40 object-cover w-full" alt="preview"/>}
-                        </div>
-                    )}
-
-                    {/* Reactions */}
-                    {m.reactions?.length > 0 && (
-                        <div className="flex gap-1 mt-1 flex-wrap">
-                            {m.reactions.map((r, i) => (
-                                <div key={i} onClick={()=>onReact(m._id, r.emoji)} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] cursor-pointer border ${r.users.includes(user._id) ? 'bg-[#3b405a] border-[var(--primary)]' : 'bg-[#2B2D31] border-transparent hover:border-gray-500'}`}>
-                                    <span className="text-sm">{r.emoji}</span><span className="text-xs font-bold text-[#B5BAC1]">{r.count}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Hover Actions */}
-                <div className="absolute -top-2 right-4 bg-[#313338] shadow-sm p-1 rounded border border-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
-                    <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
-                    <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Reply size={16}/></button>
-                    {isMe && <button onClick={()=>setEditMsg(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Edit2 size={16}/></button>}
-                    {isMe && <button onClick={()=>onDelete(m._id)} className="p-1 hover:bg-[#404249] rounded text-red-400 hover:text-red-500"><Trash size={16}/></button>}
-                </div>
-
-                {context && (
-                    <div style={{top:context.y, left:context.x}} className="fixed bg-[#111] border border-white/10 rounded p-1 w-40 z-50 shadow-xl" onMouseLeave={()=>setContext(null)}>
-                        <button onClick={()=>{onPin(m._id, !m.isPinned); setContext(null)}} className="w-full text-left p-2 hover:bg-[var(--primary)] text-xs text-white rounded flex gap-2"><Pin size={14}/> {m.isPinned?'Открепить':'Закрепить'}</button>
-                    </div>
-                )}
-            </div>
-            </>
-        );
-    }
-    return <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col pb-4">{messages.map(m => <Message key={m._id} m={m} />)}<div ref={bottomRef}/></div>
+                    )
+                }}
+            />
+        </div>
+    );
 }
 
-function ChatView({ user, noiseSuppression }) {
+function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const { friendId } = useParams();
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -622,9 +690,11 @@ function ChatView({ user, noiseSuppression }) {
   const [isScreenOn, setIsScreenOn] = useState(false);
   const peerRef = useRef();
   
-  // Fixes: Edit Modal & DragDrop
+  // Fixes: Edit Modal & DragDrop & Search
   const [editMsg, setEditMsg] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   
   const friend = activeChat?.members?.find(m => m._id !== user._id);
 
@@ -670,7 +740,11 @@ function ChatView({ user, noiseSuppression }) {
 
   const startCall = async (withVideo) => {
     try {
-        const s = await navigator.mediaDevices.getUserMedia({ video: withVideo, audio: { echoCancellation: true, noiseSuppression } });
+        const constraints = {
+            video: withVideo ? { deviceId: selectedCam ? { exact: selectedCam } : undefined } : false,
+            audio: { deviceId: selectedMic ? { exact: selectedMic } : undefined, echoCancellation: true, noiseSuppression }
+        };
+        const s = await navigator.mediaDevices.getUserMedia(constraints);
         setLocalStream(s); setCallActive(true); setIsCamOn(withVideo); setIsMicOn(true);
         const call = peerRef.current.call(friendId, s);
         call.on('stream', (rs) => setRemoteStream(rs));
@@ -679,7 +753,11 @@ function ChatView({ user, noiseSuppression }) {
   };
   const answerCall = async () => {
       callSound.pause(); callSound.currentTime = 0;
-      const s = await navigator.mediaDevices.getUserMedia({ video: false, audio: { noiseSuppression } }); 
+      const constraints = {
+          video: false,
+          audio: { deviceId: selectedMic ? { exact: selectedMic } : undefined, noiseSuppression }
+      };
+      const s = await navigator.mediaDevices.getUserMedia(constraints); 
       setLocalStream(s); setCallActive(true); setIsIncoming(null); setIsCamOn(false);
       if(isIncoming.call) { isIncoming.call.answer(s); isIncoming.call.on('stream', rs => setRemoteStream(rs)); }
   };
@@ -689,20 +767,28 @@ function ChatView({ user, noiseSuppression }) {
       setCallActive(false); setLocalStream(null); setRemoteStream(null); setIsIncoming(null); setIsScreenOn(false);
   };
   const toggleMic = () => { if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } } };
-  const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: true }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
+  const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
   const shareScreen = async () => { if(!isScreenOn) { try { const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const st = ss.getVideoTracks()[0]; const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); if(sender) sender.replaceTrack(st); else peerRef.current.peerConnection.addTrack(st, localStream); st.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true); } catch(e) {} } };
 
   // Drag & Drop
   const onDrop = async (e) => {
       e.preventDefault(); setIsDragging(false);
       if(e.dataTransfer.files[0]) {
-          const fd = new FormData(); fd.append('file', e.dataTransfer.files[0]);
+          const imageFile = e.dataTransfer.files[0];
+          let uploadFile = imageFile;
+          // Compress if image
+          if(imageFile.type.startsWith('image/')) {
+             try { uploadFile = await imageCompression(imageFile, { maxSizeMB: 1, useWebWorker: true }); } catch(e){}
+          }
+          const fd = new FormData(); fd.append('file', uploadFile);
           const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
-          handleUpload(res.data.url);
+          handleUpload(res.data.url, imageFile.type.startsWith('image/') ? 'image' : 'file');
       }
   };
 
   if (!activeChat) return <div className="flex-1 flex items-center justify-center text-gray-500 font-bold animate-pulse">Загрузка...</div>;
+
+  const filteredMessages = messages.filter(m => !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div 
@@ -716,7 +802,18 @@ function ChatView({ user, noiseSuppression }) {
       <div className="h-12 flex items-center justify-between px-4 border-b border-white/5 bg-[#111] shadow-sm z-20">
           <div className="flex items-center gap-3"><div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><StatusDot status={friend?.status}/></div><div><p className="font-bold text-white text-[15px]">{friend?.displayName}</p><p className="text-[12px] text-[#949BA4]">@{friend?.username}</p></div></div>
           <div className="flex items-center gap-4 text-[#B5BAC1]">
-              <Search size={20} className="hover:text-white cursor-pointer"/>
+              <div className="relative">
+                  {showSearch ? (
+                      <input 
+                        autoFocus 
+                        onBlur={()=>!searchQuery && setShowSearch(false)} 
+                        value={searchQuery} 
+                        onChange={e=>setSearchQuery(e.target.value)} 
+                        className="bg-[#222] text-white px-2 py-1 rounded text-sm outline-none border border-white/10"
+                        placeholder="Поиск..."
+                      />
+                  ) : <Search size={20} className="hover:text-white cursor-pointer" onClick={()=>setShowSearch(true)}/>}
+              </div>
               <div className="h-4 w-[1px] bg-white/10"/>
               <Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} />
               <Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} />
@@ -725,7 +822,7 @@ function ChatView({ user, noiseSuppression }) {
       
       <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={toggleMic} toggleCam={toggleCam} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend}/>
       
-      <MessageList messages={messages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
+      <MessageList messages={filteredMessages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
       
       {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
       
@@ -738,7 +835,7 @@ function ChatView({ user, noiseSuppression }) {
   );
 }
 
-function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
+function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, selectedCam }) {
     const { serverId } = useParams();
     const query = new URLSearchParams(window.location.search);
     const channelId = query.get('channel') || user?.servers?.find(s=>s._id===serverId)?.channels?.[0]?._id;
@@ -755,27 +852,23 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
     // Fixes
     const [editMsg, setEditMsg] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [showSearch, setShowSearch] = useState(false);
 
     // FETCH SERVER DATA ON MOUNT (FIX HISTORY)
     useEffect(() => {
         if(serverId) {
             axios.get(`${SERVER_URL}/api/server/${serverId}`).then(res => {
                // Assuming logic needs full refresh, but socket events usually handle this.
-               // If history is missing, it means we need to update state from fresh fetch.
-               // However, simplicity -> just relying on user object or separate fetch.
-               // Let's force update messages from user object first, or re-fetch channel history.
-               // For this structure, messages are embedded in user->servers.
-               // The socket logic updates local state.
             });
         }
     }, [serverId]);
 
     useEffect(() => { 
         socket.emit('join_server_room', serverId); 
-        // Initial load from props
         const currentChannel = user?.servers?.find(s => s._id === serverId)?.channels?.find(c => c._id === channelId);
         setMessages(currentChannel?.messages || []); 
-    }, [channelId, serverId, user]); // Added user dependency to refresh when user data updates
+    }, [channelId, serverId, user]); 
 
     useEffect(() => {
         const onMsg = (m) => { if(m.channelId === channelId) setMessages(p => [...p, m]); };
@@ -821,7 +914,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
             if(localVoiceStream) { localVoiceStream.getTracks().forEach(t => t.stop()); setLocalVoiceStream(null); }
         } else {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression, echoCancellation: true } });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: selectedMic ? { exact: selectedMic } : undefined, noiseSuppression, echoCancellation: true } });
                 setLocalVoiceStream(stream);
                 setInVoice(true);
                 
@@ -866,11 +959,18 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
     const onDrop = async (e) => {
         e.preventDefault(); setIsDragging(false);
         if(e.dataTransfer.files[0]) {
-            const fd = new FormData(); fd.append('file', e.dataTransfer.files[0]);
+            const imageFile = e.dataTransfer.files[0];
+            let uploadFile = imageFile;
+            if(imageFile.type.startsWith('image/')) {
+                try { uploadFile = await imageCompression(imageFile, { maxSizeMB: 1, useWebWorker: true }); } catch(e){}
+            }
+            const fd = new FormData(); fd.append('file', uploadFile);
             const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
-            handleUpload(res.data.url);
+            handleUpload(res.data.url, imageFile.type.startsWith('image/') ? 'image' : 'file');
         }
     };
+
+    const filteredMessages = messages.filter(m => !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase()));
 
     return (
         <div className="flex h-full bg-[#0B0B0C]">
@@ -887,7 +987,18 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
                         <div className="h-12 border-b border-white/5 flex items-center justify-between px-4 font-bold text-white shadow-sm">
                             <div className="flex items-center"><Hash size={24} className="mr-2 text-gray-500"/> {channel.name}</div>
                             <div className="flex items-center gap-2">
-                                <Search size={20} className="text-gray-400 hover:text-white cursor-pointer mr-2"/>
+                                <div className="relative">
+                                    {showSearch ? (
+                                        <input 
+                                            autoFocus 
+                                            onBlur={()=>!searchQuery && setShowSearch(false)} 
+                                            value={searchQuery} 
+                                            onChange={e=>setSearchQuery(e.target.value)} 
+                                            className="bg-[#222] text-white px-2 py-1 rounded text-sm outline-none border border-white/10"
+                                            placeholder="Поиск..."
+                                        />
+                                    ) : <Search size={20} className="text-gray-400 hover:text-white cursor-pointer mr-2" onClick={()=>setShowSearch(true)}/>}
+                                </div>
                                 <button onClick={()=>setShowSoundboard(!showSoundboard)} className={`p-2 rounded hover:bg-[#333] transition-colors ${showSoundboard ? 'text-[var(--primary)]' : 'text-gray-400'}`}><Music size={20}/></button>
                             </div>
                         </div>
@@ -903,7 +1014,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
                         )}
                         </AnimatePresence>
 
-                        <MessageList messages={messages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
+                        <MessageList messages={filteredMessages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
                         {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
                         {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
                         <ChatInput onSend={handleSend} onUpload={handleUpload} onType={handleType} placeholder={`Написать в #${channel.name}`} members={server?.members || []} roomId={serverId} />
@@ -979,7 +1090,7 @@ function CreateServerModal({ user, onClose, refresh }) {
     return (<div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[500]"><motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-3xl text-center w-full max-w-sm shadow-2xl border border-white/10"><h2 className="text-2xl font-black text-white mb-2">Создать сервер</h2><p className="text-gray-400 text-xs mb-6 px-4">Сервер — это место, где вы можете общаться с друзьями.</p><div className="uppercase text-[10px] font-black text-gray-400 mb-2 text-left tracking-widest">Название сервера</div><input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none mb-6 text-sm" /><div className="flex justify-between items-center"><button onClick={onClose} className="text-gray-300 hover:underline text-sm font-bold">Назад</button><button onClick={create} className="bg-[#5865F2] hover:bg-[#4752c4] px-8 py-2.5 rounded-xl text-white font-bold text-sm transition-all shadow-lg">Создать</button></div></motion.div></div>)
 }
 
-function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt, setPtt, pttKey, setPttKey }) {
+function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt, setPtt, pttKey, setPttKey, selectedMic, setSelectedMic, selectedCam, setSelectedCam }) {
     const [activeTab, setActiveTab] = useState('account'); 
     const [displayName, setDisplayName] = useState(user?.displayName || "");
     const [bio, setBio] = useState(user?.bio || "");
@@ -989,6 +1100,17 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
     const [newPass, setNewPass] = useState("");
     const [currPass, setCurrPass] = useState("");
     const [keyWait, setKeyWait] = useState(false);
+    
+    // Devices
+    const [audioDevices, setAudioDevices] = useState([]);
+    const [videoDevices, setVideoDevices] = useState([]);
+
+    useEffect(() => {
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            setAudioDevices(devices.filter(d => d.kind === 'audioinput'));
+            setVideoDevices(devices.filter(d => d.kind === 'videoinput'));
+        });
+    }, []);
     
     // Auto launch state
     const [autoLaunch, setAutoLaunch] = useState(false);
@@ -1011,118 +1133,56 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
         if (ipcRenderer) ipcRenderer.send('toggle-auto-launch', newState);
     };
 
-    const saveProfile = async () => { const fd = new FormData(); fd.append('userId', user._id); fd.append('displayName', displayName); fd.append('bio', bio); fd.append('bannerColor', banner); if(file) fd.append('avatar', file); try { const res = await axios.post(`${SERVER_URL}/api/update-profile`, fd); setUser(res.data); localStorage.setItem('user', JSON.stringify(res.data)); localStorage.setItem('noiseSuppression', noise); localStorage.setItem('pttEnabled', ptt); onClose(); } catch(e) { alert("Ошибка"); } };
+    const saveProfile = async () => { 
+        const fd = new FormData(); 
+        fd.append('userId', user._id); 
+        fd.append('displayName', displayName); 
+        fd.append('bio', bio); 
+        fd.append('bannerColor', banner); 
+        if(file) fd.append('avatar', file); 
+        
+        try { 
+            const res = await axios.post(`${SERVER_URL}/api/update-profile`, fd); 
+            setUser(res.data); 
+            localStorage.setItem('user', JSON.stringify(res.data)); 
+            localStorage.setItem('noiseSuppression', noise); 
+            localStorage.setItem('pttEnabled', ptt);
+            localStorage.setItem('selectedMic', selectedMic);
+            localStorage.setItem('selectedCam', selectedCam);
+            onClose(); 
+        } catch(e) { alert("Ошибка"); } 
+    };
     const saveAccount = async () => { try { await axios.post(`${SERVER_URL}/api/update-account`, { userId: user._id, email, newPassword: newPass, currentPassword: currPass }); alert("Аккаунт обновлен!"); onClose(); } catch(e) { alert(e.response?.data?.error || "Ошибка"); } };
     
-    return (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8"><motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[30px] flex overflow-hidden shadow-2xl border border-white/5"><div className="w-64 bg-[#2B2D31] p-6 pt-10"><p className="uppercase text-[10px] font-black text-gray-400 px-2 mb-2 tracking-widest">Настройки пользователя</p><div onClick={()=>setActiveTab('account')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Моя учетная запись</div><div onClick={()=>setActiveTab('profile')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Профиль</div><div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div></div><div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]"><div onClick={onClose} className="absolute top-6 right-6 p-2 border-2 border-gray-500 rounded-full text-gray-500 hover:text-white hover:border-white cursor-pointer transition-all opacity-70 hover:opacity-100"><X size={20}/></div>{activeTab === 'account' && (<><h2 className="text-xl font-black text-white mb-6">Моя учетная запись</h2><div className="bg-[#1E1F22] rounded-2xl p-6 mb-8 flex items-center gap-6 border border-white/5"><div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111]" alt="av"/><div className="absolute -bottom-1 -right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div><div><h3 className="text-2xl font-black text-white">{user?.displayName}</h3><p className="text-sm font-bold text-gray-400">@{user?.username}</p></div><button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-6 py-2 rounded-xl text-white font-bold text-sm hover:bg-[#4752c4]">Редактировать профиль</button></div><div className="bg-[#1E1F22] rounded-2xl p-6 border border-white/5 space-y-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Email</label><input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Новый пароль</label><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Текущий пароль (для подтверждения)</label><input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div></div></div><div className="mt-6 flex justify-end"><button onClick={saveAccount} className="bg-green-600 px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-green-500 transition-all">Сохранить изменения</button></div></>)}{activeTab === 'profile' && (<><h2 className="text-xl font-black text-white mb-6">Профиль</h2><div className="bg-[#1E1F22] rounded-2xl overflow-hidden mb-8 border border-white/5"><div style={{ backgroundColor: banner }} className="h-32 w-full relative group"><div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Settings size={16} className="text-white"/></div></div></div><div className="px-6 pb-6 flex justify-between items-end -mt-10"><div className="flex items-end gap-4"><div className="relative group"><img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" /><label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><Camera size={24} className="text-white"/><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label></div></div></div><div className="p-6 pt-0 grid grid-cols-2 gap-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Отображаемое имя</label><input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">О себе</label><textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none h-[46px] resize-none" /></div></div></div><h2 className="text-xl font-black text-white mb-4">Настройки приложения</h2><div className="bg-[#1E1F22] p-6 rounded-2xl mb-8 border border-white/5 space-y-6"><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div><div className="h-[1px] bg-white/5"/><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}<div className="h-[1px] bg-white/5"/><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Запускать вместе с Windows</h4><p className="text-xs text-gray-400 mt-1">Автоматически открывать TalkSpace при входе в систему.</p></div><div onClick={toggleAutoLaunch} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${autoLaunch ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${autoLaunch ? 'translate-x-6' : 'translate-x-0'}`}/></div></div></div><div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div></>)}</div></motion.div></div>);
-}
-
-// --- CALL HEADER COMPONENT ---
-function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localStream, remoteStream, toggleMic, toggleCam, shareScreen, isMicOn, isCamOn, isScreenOn, friend }) {
-    if(!callActive && !incoming) return null;
-    return (
-        <div className="bg-[#000] p-4 border-b border-white/5 flex flex-col items-center justify-center relative min-h-[200px] z-30">
-            {incoming ? (
-                <div className="text-center animate-bounce">
-                    <img src={friend?.avatar} className="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.5)]" alt="caller"/>
-                    <h3 className="text-xl font-bold text-white mb-6">Входящий звонок от {friend?.displayName}...</h3>
-                    <div className="flex gap-8 justify-center">
-                        <button onClick={onAccept} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><Phone size={32} className="text-white"/></button>
-                        <button onClick={onReject} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><PhoneOff size={32} className="text-white"/></button>
-                    </div>
+    return (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8"><motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[30px] flex overflow-hidden shadow-2xl border border-white/5"><div className="w-64 bg-[#2B2D31] p-6 pt-10"><p className="uppercase text-[10px] font-black text-gray-400 px-2 mb-2 tracking-widest">Настройки пользователя</p><div onClick={()=>setActiveTab('account')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Моя учетная запись</div><div onClick={()=>setActiveTab('profile')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Профиль</div><div onClick={()=>setActiveTab('voice')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='voice' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Голос и Видео</div><div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div></div><div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]"><div onClick={onClose} className="absolute top-6 right-6 p-2 border-2 border-gray-500 rounded-full text-gray-500 hover:text-white hover:border-white cursor-pointer transition-all opacity-70 hover:opacity-100"><X size={20}/></div>
+    
+    {activeTab === 'account' && (<><h2 className="text-xl font-black text-white mb-6">Моя учетная запись</h2><div className="bg-[#1E1F22] rounded-2xl p-6 mb-8 flex items-center gap-6 border border-white/5"><div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111]" alt="av"/><div className="absolute -bottom-1 -right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div><div><h3 className="text-2xl font-black text-white">{user?.displayName}</h3><p className="text-sm font-bold text-gray-400">@{user?.username}</p></div><button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-6 py-2 rounded-xl text-white font-bold text-sm hover:bg-[#4752c4]">Редактировать профиль</button></div><div className="bg-[#1E1F22] rounded-2xl p-6 border border-white/5 space-y-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Email</label><input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Новый пароль</label><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Текущий пароль (для подтверждения)</label><input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div></div></div><div className="mt-6 flex justify-end"><button onClick={saveAccount} className="bg-green-600 px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-green-500 transition-all">Сохранить изменения</button></div></>)}
+    
+    {activeTab === 'profile' && (<><h2 className="text-xl font-black text-white mb-6">Профиль</h2><div className="bg-[#1E1F22] rounded-2xl overflow-hidden mb-8 border border-white/5"><div style={{ backgroundColor: banner }} className="h-32 w-full relative group"><div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Settings size={16} className="text-white"/></div></div></div><div className="px-6 pb-6 flex justify-between items-end -mt-10"><div className="flex items-end gap-4"><div className="relative group"><img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" /><label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><Camera size={24} className="text-white"/><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label></div></div></div><div className="p-6 pt-0 grid grid-cols-2 gap-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Отображаемое имя</label><input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">О себе</label><textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none h-[46px] resize-none" /></div></div></div><div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div></>)}
+    
+    {activeTab === 'voice' && (
+        <>
+            <h2 className="text-xl font-black text-white mb-6">Голос и Видео</h2>
+            <div className="bg-[#1E1F22] p-6 rounded-2xl mb-8 border border-white/5 space-y-6">
+                <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Устройство ввода (Микрофон)</label>
+                    <select value={selectedMic} onChange={e=>setSelectedMic(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none border border-white/10">
+                        {audioDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Microphone ${d.deviceId.slice(0,5)}...`}</option>)}
+                    </select>
                 </div>
-            ) : (
-                <div className="w-full h-full flex flex-col">
-                    <div className="flex-1 flex items-center justify-center gap-4 relative overflow-hidden rounded-xl bg-[#111] mb-4 min-h-[300px]">
-                        {/* Remote Stream */}
-                        {remoteStream && remoteStream.getVideoTracks().length > 0 ? (
-                            <video autoPlay ref={v => v && (v.srcObject = remoteStream)} className="w-full h-full object-contain" />
-                        ) : (
-                            <div className="flex flex-col items-center"><img src={friend?.avatar} className="w-24 h-24 rounded-full mb-4 animate-pulse" alt="friend"/><p className="text-gray-400 font-bold">Звонок идет...</p></div>
-                        )}
-                        {/* Local Stream PIP */}
-                        <div className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg border border-white/10 overflow-hidden shadow-2xl">
-                             {localStream && isCamOn ? <video autoPlay muted ref={v => v && (v.srcObject = localStream)} className="w-full h-full object-cover -scale-x-100" /> : <div className="w-full h-full flex items-center justify-center bg-[#222]"><Users size={24} className="text-gray-500"/></div>}
-                        </div>
-                    </div>
-                    <div className="flex justify-center gap-4">
-                        <button onClick={toggleMic} className={`p-4 rounded-full ${isMicOn ? 'bg-[#2B2D31] hover:bg-[#404249]' : 'bg-red-500 text-white'} transition-colors`}>{isMicOn ? <Mic size={24}/> : <MicOff size={24}/>}</button>
-                        <button onClick={toggleCam} className={`p-4 rounded-full ${isCamOn ? 'bg-[#2B2D31] hover:bg-[#404249]' : 'bg-red-500 text-white'} transition-colors`}>{isCamOn ? <Video size={24}/> : <VideoOff size={24}/>}</button>
-                        <button onClick={shareScreen} className={`p-4 rounded-full ${isScreenOn ? 'bg-green-500 text-white' : 'bg-[#2B2D31] hover:bg-[#404249]'} transition-colors`}><Monitor size={24}/></button>
-                        <button onClick={onHangup} className="p-4 rounded-full bg-red-500 hover:bg-red-600 transition-colors shadow-lg"><PhoneOff size={24} className="text-white"/></button>
-                    </div>
+                <div>
+                    <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Камера</label>
+                    <select value={selectedCam} onChange={e=>setSelectedCam(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none border border-white/10">
+                        {videoDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${d.deviceId.slice(0,5)}...`}</option>)}
+                    </select>
                 </div>
-            )}
-        </div>
-    )
-}
-
-const BackgroundEffect = () => (
-    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] animate-[spin_100s_linear_infinite]"/>
-        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[var(--primary)]/10 to-transparent"/>
-    </div>
-);
-
-// --- AUTH COMPONENT (SAME AS BEFORE) ---
-function Auth({ onAuth }) {
-  const [isLogin, setIsLogin] = useState(true);
-  const [loginData, setLoginData] = useState({ login: '', password: '' });
-  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
-  const [usernameStatus, setUsernameStatus] = useState(null); 
-  const [error, setError] = useState("");
-
-  useEffect(() => { if(isLogin || !regData.username) return; const timeout = setTimeout(async () => { try { const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username }); setUsernameStatus(res.data.available ? 'free' : 'taken'); } catch(e) {} }, 500); return () => clearTimeout(timeout); }, [regData.username, isLogin]);
-  const handleLogin = async () => { try { const res = await axios.post(`${SERVER_URL}/api/login`, loginData); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); } };
-  const handleRegister = async () => { try { if(usernameStatus !== 'free') return setError("Имя пользователя занято"); if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения"); const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } }); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); } };
-
-  return (
-    <div className="h-screen flex items-center justify-center relative bg-[#000] overflow-hidden drag-region">
-      <div className="absolute inset-0 bg-black">
-          <div className="absolute top-[-20%] left-[-20%] w-[50vw] h-[50vw] bg-blue-900/20 rounded-full blur-[120px]"/>
-          <div className="absolute bottom-[-20%] right-[-20%] w-[50vw] h-[50vw] bg-purple-900/20 rounded-full blur-[120px]"/>
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
-      </div>
-
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#050505]/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-[420px] z-10 relative border border-white/10 no-drag">
-        <div className="text-center mb-8">
-            <h1 className="text-3xl font-black text-white tracking-tight">TALKSPACE</h1>
-            <p className="text-gray-500 text-xs tracking-[0.2em] mt-1 font-bold">SECURE COMMUNICATION UPLINK</p>
-        </div>
-
-        {isLogin ? (
-            <>
-                <Input label="Логин" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})} className="mb-6"/>
-                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
-                <button onClick={handleLogin} className="w-full bg-white hover:bg-gray-200 text-black font-black py-3 rounded-[4px] transition-all mb-4 mt-6 uppercase tracking-wider text-xs">Войти в систему</button>
-                <div className="text-xs text-center text-gray-500">Нет аккаунта? <span onClick={()=>setIsLogin(false)} className="text-white cursor-pointer hover:underline font-bold">Создать ID</span></div>
-            </>
-        ) : (
-            <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
-                <Input label="Никнейм" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
-                
-                <div className="mb-4">
-                    <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>ID (Логин) *</label>
-                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className={`w-full bg-[#111] border ${usernameStatus === 'free' ? 'border-green-500/50' : 'border-white/10'} p-2.5 rounded-[3px] text-white outline-none text-sm transition-all`} />
-                </div>
-                
-                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
-                
-                <div className="mb-6">
-                    <label className="block text-[11px] font-bold uppercase text-gray-400 mb-2">Дата рождения</label>
-                    <div className="flex gap-2">
-                        <div className="w-[30%]"><CustomSelect placeholder="ДД" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
-                        <div className="w-[40%]"><CustomSelect placeholder="ММ" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
-                        <div className="w-[30%]"><CustomSelect placeholder="ГГГГ" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
-                    </div>
-                </div>
-                <button onClick={handleRegister} className="w-full bg-white hover:bg-gray-200 text-black font-black py-3 rounded-[4px] transition-all mt-4 uppercase tracking-wider text-xs">Инициализация</button>
-                <div className="text-xs text-gray-500 mt-4 cursor-pointer hover:underline font-bold text-center" onClick={()=>{setIsLogin(true); setError("")}}>Вернуться к входу</div>
+                <div className="h-[1px] bg-white/5"/>
+                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>
+                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}
             </div>
-        )}
-        {error && <div className="mt-4 bg-red-900/20 border border-red-500/50 text-red-200 p-3 rounded text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
-      </motion.div>
-    </div>
-  );
+            <div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div>
+        </>
+    )}
+    
+    </div></motion.div></div>);
 }
