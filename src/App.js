@@ -16,22 +16,18 @@ import {
   DownloadCloud
 } from 'lucide-react';
 
-// --- IPC СВЯЗЬ С ELECTRON ---
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
 
-// --- КОНФИГУРАЦИЯ ---
 const SERVER_URL = "https://talkspace-7fwq.onrender.com"; 
 const socket = io(SERVER_URL);
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
-// ЗВУКИ
 const msgSound = new Audio("./sounds/message.mp3");
 const callSound = new Audio("./sounds/call.mp3");
 callSound.loop = true;
 
 const ThemeContext = createContext();
 
-// ФАКТЫ ЗАГРУЗКИ
 const LOADING_FACTS = [
     "Используйте **жирный текст** для акцента.",
     "Вы можете создать свой сервер и пригласить друзей.",
@@ -40,9 +36,8 @@ const LOADING_FACTS = [
     "TalkSpace поддерживает демонстрацию экрана в HD."
 ];
 
-// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ UI (ВЫНЕСЕНЫ НАРУЖУ) ---
+// --- HELPER COMPONENTS ---
 
-// 1. Поле ввода (Исправлен баг с фокусом)
 const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
     <div className="mb-4">
         <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-[#B5BAC1]'}`}>
@@ -58,7 +53,6 @@ const Input = ({ label, value, onChange, type="text", required=false, errorMsg }
     </div>
 );
 
-// 2. Кастомный Селект (Для даты рождения)
 const CustomSelect = ({ options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
@@ -154,9 +148,7 @@ function UpdateBanner() {
 function BackgroundEffect() {
     return (
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#0B0B0C]">
-          {/* Статичный фон паттерн */}
           <div className="absolute inset-0 bg-[url('https://discord.com/assets/843b08e5830058e3789a24d9c79e6079.svg')] bg-cover opacity-5"></div>
-          {/* Анимированные пятна */}
           <motion.div animate={{ x: [0, 100, 0], y: [0, -50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 15, repeat: Infinity }} className="absolute top-0 left-0 w-[60vw] h-[60vw] bg-purple-900 rounded-full blur-[150px]" />
           <motion.div animate={{ x: [0, -100, 0], y: [0, 50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 18, repeat: Infinity }} className="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-blue-900 rounded-full blur-[150px]" />
       </div>
@@ -213,97 +205,6 @@ export default function App() {
   );
 }
 
-// --- АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ---
-function Auth({ onAuth }) {
-  const [isLogin, setIsLogin] = useState(true);
-  
-  const [loginData, setLoginData] = useState({ login: '', password: '' });
-  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
-  const [usernameStatus, setUsernameStatus] = useState(null); 
-  const [error, setError] = useState("");
-
-  // Проверка имени пользователя
-  useEffect(() => {
-      if(isLogin || !regData.username) return;
-      const timeout = setTimeout(async () => {
-          try {
-             const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username });
-             setUsernameStatus(res.data.available ? 'free' : 'taken');
-          } catch(e) {}
-      }, 500);
-      return () => clearTimeout(timeout);
-  }, [regData.username, isLogin]);
-
-  const handleLogin = async () => {
-      try {
-          const res = await axios.post(`${SERVER_URL}/api/login`, loginData);
-          onAuth(res.data);
-      } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); }
-  };
-
-  const handleRegister = async () => {
-      try {
-          if(usernameStatus !== 'free') return setError("Имя пользователя занято");
-          if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения");
-          
-          const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } });
-          onAuth(res.data);
-      } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); }
-  };
-
-  return (
-    <div className="h-screen flex items-center justify-center relative bg-[#0B0B0C] overflow-hidden">
-      <BackgroundEffect />
-      
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-[5px] shadow-2xl w-full max-w-[480px] z-10 relative border border-white/5">
-        {isLogin ? (
-            <>
-                <h2 className="text-2xl font-bold text-white text-center mb-2">С возвращением!</h2>
-                <p className="text-[#B5BAC1] text-center text-[15px] mb-6">Мы так рады видеть вас снова!</p>
-                
-                <Input label="Адрес электронной почты или имя пользователя" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})}/>
-                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
-                
-                <div className="text-[#00A8FC] text-xs font-medium cursor-pointer mb-6 hover:underline">Забыли пароль?</div>
-                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all mb-2 text-sm">Вход</button>
-                <div className="text-xs text-[#949BA4] mt-2">Нужна учетная запись? <span onClick={()=>{setIsLogin(false); setError("")}} className="text-[#00A8FC] cursor-pointer hover:underline ml-1">Зарегистрироваться</span></div>
-            </>
-        ) : (
-            <div className="max-h-[85vh] overflow-y-auto no-scrollbar pr-1">
-                <h2 className="text-2xl font-bold text-white text-center mb-6">Создать учетную запись</h2>
-                
-                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
-                <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
-                
-                <div className="mb-4">
-                    <label className={`block text-[11px] font-bold uppercase mb-1.5 ${usernameStatus==='taken'?'text-red-400':'text-[#B5BAC1]'}`}>Имя пользователя <span className="text-red-400">*</span></label>
-                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium" />
-                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-medium">Супер! Это имя свободно.</p>}
-                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-medium">Имя занято.</p>}
-                </div>
-
-                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
-                
-                <div className="mb-6">
-                    <label className="block text-[11px] font-bold uppercase text-[#B5BAC1] mb-1.5">Дата рождения <span className="text-red-400">*</span></label>
-                    <div className="flex gap-3">
-                        <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
-                        <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
-                        <div className="w-[30%]"><CustomSelect placeholder="Год" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
-                    </div>
-                </div>
-
-                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all text-sm">Продолжить</button>
-                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-medium text-left" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
-            </div>
-        )}
-        {error && <div className="mt-4 bg-[#F23F43] text-white p-2 rounded text-xs font-medium text-center">{error}</div>}
-      </motion.div>
-    </div>
-  );
-}
-
-// --- ОСНОВНОЙ ЛЕЙАУТ ---
 function MainLayout({ user, setUser, onLogout }) {
   const navigate = useNavigate();
   const [showSettings, setShowSettings] = useState(false);
@@ -406,7 +307,7 @@ function MainLayout({ user, setUser, onLogout }) {
 
 const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
     <>
-        <div className="h-12 flex items-center px-4 font-bold text-white border-b border-[#1F2023] shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
+        <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-all ${window.location.hash.includes('/friends') ? 'bg-[#404249] text-white' : 'text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>
             <Users size={20} /> <span className="text-[15px] font-medium">Друзья</span>
@@ -726,17 +627,52 @@ function ServerView({ user, noiseSuppression }) {
     const channel = server?.channels?.find(c => c._id === channelId);
     const [messages, setMessages] = useState(channel?.messages || []);
     const [inVoice, setInVoice] = useState(false);
+    const [localVoiceStream, setLocalVoiceStream] = useState(null);
 
-    useEffect(() => { socket.emit('join_server_room', serverId); setMessages(channel?.messages || []); }, [channelId, serverId, channel]);
-    socket.on('new_server_msg', (m) => { if(m.channelId === channelId) setMessages(p => [...p, m]); });
-    socket.on('new_server_msg_update', (d) => { if(d.channelId === channelId) setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)); });
-    socket.on('new_server_msg_delete', (d) => { if(d.channelId === channelId) setMessages(p => p.filter(m => m._id !== d.msgId)); });
+    useEffect(() => { 
+        socket.emit('join_server_room', serverId); 
+        setMessages(channel?.messages || []); 
+    }, [channelId, serverId, channel]);
+
+    useEffect(() => {
+        const onMsg = (m) => { if(m.channelId === channelId) setMessages(p => [...p, m]); };
+        const onUpdate = (d) => { if(d.channelId === channelId) setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)); };
+        const onDelete = (d) => { if(d.channelId === channelId) setMessages(p => p.filter(m => m._id !== d.msgId)); };
+
+        socket.on('new_server_msg', onMsg);
+        socket.on('new_server_msg_update', onUpdate);
+        socket.on('new_server_msg_delete', onDelete);
+
+        return () => {
+            socket.off('new_server_msg', onMsg);
+            socket.off('new_server_msg_update', onUpdate);
+            socket.off('new_server_msg_delete', onDelete);
+        };
+    }, [channelId]);
 
     const handleSend = (text) => socket.emit('send_msg', { serverId, channelId, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text' });
     const handleReact = (msgId, emoji) => axios.post(`${SERVER_URL}/api/message/react`, { serverId, channelId, msgId, emoji, userId: user._id });
     const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { serverId, channelId, msgId: m._id, newText: t }); };
     const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { serverId, channelId, msgId });
     const kickMember = async (id) => { if(server.owner === user._id) await axios.post(`${SERVER_URL}/api/kick-member`, { serverId, userId: id }); };
+
+    const toggleVoice = async () => {
+        if (inVoice) {
+            setInVoice(false);
+            if(localVoiceStream) {
+                localVoiceStream.getTracks().forEach(t => t.stop());
+                setLocalVoiceStream(null);
+            }
+        } else {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                setLocalVoiceStream(stream);
+                setInVoice(true);
+            } catch (e) {
+                alert("Ошибка доступа к микрофону");
+            }
+        }
+    };
 
     return (
         <div className="flex h-full bg-[#313338]">
@@ -748,7 +684,18 @@ function ServerView({ user, noiseSuppression }) {
                         <ChatInput onSend={handleSend} onUpload={()=>{}} placeholder={`Написать в #${channel.name}`} />
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center flex-col text-center"><Volume2 size={64} className="text-[#404249] mb-6"/><h2 className="text-2xl font-bold mb-4 text-white">Голосовой канал: {channel?.name}</h2>{!inVoice ? (<button onClick={()=>setInVoice(true)} className="bg-[#5865F2] px-8 py-2.5 rounded text-white font-bold hover:bg-[#4752C4] transition-all">Подключиться</button>) : (<div className="text-center"><p className="text-green-400 mb-4 font-bold">Вы подключены</p><button onClick={()=>setInVoice(false)} className="bg-[#F23F43] px-8 py-2.5 rounded text-white font-bold hover:bg-[#D9363A] transition-all">Отключиться</button></div>)}</div>
+                    <div className="flex-1 flex items-center justify-center flex-col text-center">
+                        <Volume2 size={64} className="text-[#404249] mb-6"/>
+                        <h2 className="text-2xl font-bold mb-4 text-white">Голосовой канал: {channel?.name}</h2>
+                        {!inVoice ? (
+                            <button onClick={toggleVoice} className="bg-[#5865F2] px-8 py-2.5 rounded text-white font-bold hover:bg-[#4752C4] transition-all">Подключиться</button>
+                        ) : (
+                            <div className="text-center">
+                                <p className="text-green-400 mb-4 font-bold">Вы подключены</p>
+                                <button onClick={toggleVoice} className="bg-[#F23F43] px-8 py-2.5 rounded text-white font-bold hover:bg-[#D9363A] transition-all">Отключиться</button>
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
             <div className="w-60 bg-[#2B2D31] p-4 overflow-y-auto border-l border-white/5">
@@ -858,4 +805,4 @@ function Auth({ onAuth }) {
       </motion.div>
     </div>
   );
-};
+}
