@@ -16,18 +16,22 @@ import {
   DownloadCloud
 } from 'lucide-react';
 
+// --- IPC СВЯЗЬ С ELECTRON ---
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
 
+// --- КОНФИГУРАЦИЯ ---
 const SERVER_URL = "https://talkspace-7fwq.onrender.com"; 
 const socket = io(SERVER_URL);
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
+// ЗВУКИ
 const msgSound = new Audio("./sounds/message.mp3");
 const callSound = new Audio("./sounds/call.mp3");
 callSound.loop = true;
 
 const ThemeContext = createContext();
 
+// ФАКТЫ ЗАГРУЗКИ
 const LOADING_FACTS = [
     "Используйте **жирный текст** для акцента.",
     "Вы можете создать свой сервер и пригласить друзей.",
@@ -36,8 +40,9 @@ const LOADING_FACTS = [
     "TalkSpace поддерживает демонстрацию экрана в HD."
 ];
 
-// --- HELPER COMPONENTS (ВЫНЕСЕНЫ ИЗ ФУНКЦИЙ) ---
+// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ UI (ВЫНЕСЕНЫ НАРУЖУ) ---
 
+// 1. Поле ввода (Исправлен баг с фокусом)
 const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
     <div className="mb-4">
         <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-[#B5BAC1]'}`}>
@@ -53,6 +58,7 @@ const Input = ({ label, value, onChange, type="text", required=false, errorMsg }
     </div>
 );
 
+// 2. Кастомный Селект (Для даты рождения)
 const CustomSelect = ({ options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
@@ -148,7 +154,9 @@ function UpdateBanner() {
 function BackgroundEffect() {
     return (
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#0B0B0C]">
+          {/* Статичный фон паттерн */}
           <div className="absolute inset-0 bg-[url('https://discord.com/assets/843b08e5830058e3789a24d9c79e6079.svg')] bg-cover opacity-5"></div>
+          {/* Анимированные пятна */}
           <motion.div animate={{ x: [0, 100, 0], y: [0, -50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 15, repeat: Infinity }} className="absolute top-0 left-0 w-[60vw] h-[60vw] bg-purple-900 rounded-full blur-[150px]" />
           <motion.div animate={{ x: [0, -100, 0], y: [0, 50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 18, repeat: Infinity }} className="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-blue-900 rounded-full blur-[150px]" />
       </div>
@@ -205,6 +213,97 @@ export default function App() {
   );
 }
 
+// --- АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ---
+function Auth({ onAuth }) {
+  const [isLogin, setIsLogin] = useState(true);
+  
+  const [loginData, setLoginData] = useState({ login: '', password: '' });
+  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
+  const [usernameStatus, setUsernameStatus] = useState(null); 
+  const [error, setError] = useState("");
+
+  // Проверка имени пользователя
+  useEffect(() => {
+      if(isLogin || !regData.username) return;
+      const timeout = setTimeout(async () => {
+          try {
+             const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username });
+             setUsernameStatus(res.data.available ? 'free' : 'taken');
+          } catch(e) {}
+      }, 500);
+      return () => clearTimeout(timeout);
+  }, [regData.username, isLogin]);
+
+  const handleLogin = async () => {
+      try {
+          const res = await axios.post(`${SERVER_URL}/api/login`, loginData);
+          onAuth(res.data);
+      } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); }
+  };
+
+  const handleRegister = async () => {
+      try {
+          if(usernameStatus !== 'free') return setError("Имя пользователя занято");
+          if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения");
+          
+          const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } });
+          onAuth(res.data);
+      } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); }
+  };
+
+  return (
+    <div className="h-screen flex items-center justify-center relative bg-[#0B0B0C] overflow-hidden">
+      <BackgroundEffect />
+      
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-[5px] shadow-2xl w-full max-w-[480px] z-10 relative border border-white/5">
+        {isLogin ? (
+            <>
+                <h2 className="text-2xl font-bold text-white text-center mb-2">С возвращением!</h2>
+                <p className="text-[#B5BAC1] text-center text-[15px] mb-6">Мы так рады видеть вас снова!</p>
+                
+                <Input label="Адрес электронной почты или имя пользователя" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})}/>
+                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
+                
+                <div className="text-[#00A8FC] text-xs font-medium cursor-pointer mb-6 hover:underline">Забыли пароль?</div>
+                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all mb-2 text-sm">Вход</button>
+                <div className="text-xs text-[#949BA4] mt-2">Нужна учетная запись? <span onClick={()=>{setIsLogin(false); setError("")}} className="text-[#00A8FC] cursor-pointer hover:underline ml-1">Зарегистрироваться</span></div>
+            </>
+        ) : (
+            <div className="max-h-[85vh] overflow-y-auto no-scrollbar pr-1">
+                <h2 className="text-2xl font-bold text-white text-center mb-6">Создать учетную запись</h2>
+                
+                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
+                <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
+                
+                <div className="mb-4">
+                    <label className={`block text-[11px] font-bold uppercase mb-1.5 ${usernameStatus==='taken'?'text-red-400':'text-[#B5BAC1]'}`}>Имя пользователя <span className="text-red-400">*</span></label>
+                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium" />
+                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-medium">Супер! Это имя свободно.</p>}
+                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-medium">Имя занято.</p>}
+                </div>
+
+                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
+                
+                <div className="mb-6">
+                    <label className="block text-[11px] font-bold uppercase text-[#B5BAC1] mb-1.5">Дата рождения <span className="text-red-400">*</span></label>
+                    <div className="flex gap-3">
+                        <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
+                        <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
+                        <div className="w-[30%]"><CustomSelect placeholder="Год" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
+                    </div>
+                </div>
+
+                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all text-sm">Продолжить</button>
+                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-medium text-left" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
+            </div>
+        )}
+        {error && <div className="mt-4 bg-[#F23F43] text-white p-2 rounded text-xs font-medium text-center">{error}</div>}
+      </motion.div>
+    </div>
+  );
+}
+
+// --- ОСНОВНОЙ ЛЕЙАУТ ---
 function MainLayout({ user, setUser, onLogout }) {
   const navigate = useNavigate();
   const [showSettings, setShowSettings] = useState(false);
@@ -307,7 +406,7 @@ function MainLayout({ user, setUser, onLogout }) {
 
 const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
     <>
-        <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
+        <div className="h-12 flex items-center px-4 font-bold text-white border-b border-[#1F2023] shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-all ${window.location.hash.includes('/friends') ? 'bg-[#404249] text-white' : 'text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>
             <Users size={20} /> <span className="text-[15px] font-medium">Друзья</span>
@@ -737,14 +836,14 @@ function Auth({ onAuth }) {
                 <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
                 <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
                 <div className="mb-4">
-                    <label className={`block text-[11px] font-black uppercase mb-2 ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>Имя пользователя <span className="text-red-400">*</span></label>
+                    <label className={`block text-[10px] font-black uppercase mb-2 ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>Имя пользователя <span className="text-red-400">*</span></label>
                     <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none text-sm transition-all font-medium" />
                     {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-bold">Супер! Это имя свободно.</p>}
                     {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-bold">Имя занято.</p>}
                 </div>
                 <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
                 <div className="mb-6">
-                    <label className="block text-[11px] font-black uppercase text-gray-400 mb-2">Дата рождения <span className="text-red-400">*</span></label>
+                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Дата рождения <span className="text-red-400">*</span></label>
                     <div className="flex gap-3">
                         <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
                         <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
@@ -758,5 +857,5 @@ function Auth({ onAuth }) {
         {error && <div className="mt-4 bg-red-500/10 border border-red-500 text-white p-3 rounded-xl text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
       </motion.div>
     </div>
-    );
-};
+  );
+}
