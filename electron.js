@@ -3,7 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const url = require('url');
 
-// Логирование обновлений (опционально, но полезно)
+// Логирование обновлений
 autoUpdater.logger = require("electron-log");
 autoUpdater.logger.transports.file.level = "info";
 
@@ -12,6 +12,39 @@ let splashWindow;
 let tray = null;
 let isQuitting = false;
 
+// --- ЗАПРЕТ НА ЗАПУСК ВТОРОГО ОКНА ---
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Если кто-то пытается запустить вторую копию, фокусируемся на главном окне
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      if (!mainWindow.isVisible()) mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    // Разрешения на медиа (камера/микрофон)
+    session.defaultSession.setPermissionCheckHandler(() => true);
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      callback(true);
+    });
+    
+    createSplashWindow();
+    
+    if (app.isPackaged) {
+        autoUpdater.checkForUpdates(); 
+    } else {
+        // В разработке задержка для имитации загрузки
+        setTimeout(createMainWindow, 1500);
+    }
+  });
+}
+
 function getIconPath() {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'favicon.ico');
@@ -19,7 +52,7 @@ function getIconPath() {
   return path.join(__dirname, 'public/favicon.ico');
 }
 
-// --- СОЗДАНИЕ SPLASH SCREEN (ЗАГРУЗКА) ---
+// --- SPLASH SCREEN ---
 function createSplashWindow() {
   splashWindow = new BrowserWindow({
     width: 300,
@@ -35,26 +68,18 @@ function createSplashWindow() {
     }
   });
 
-  const splashUrl = url.format({
-    pathname: path.join(__dirname, app.isPackaged ? 'resources/splash.html' : 'public/splash.html'),
-    protocol: 'file:',
-    slashes: true
-  });
-
-  // Если в продакшене путь кривой, используем прямой путь (хак для билда)
   const loadPath = app.isPackaged 
       ? path.join(process.resourcesPath, 'splash.html') 
       : path.join(__dirname, 'public/splash.html');
 
   splashWindow.loadFile(loadPath).catch(() => {
-      // Fallback если файл не найден
       splashWindow.loadURL(`data:text/html;charset=utf-8,<html><body style="background:#2b2d31;color:white;display:flex;justify-content:center;align-items:center;"><h1>TalkSpace Loading...</h1></body></html>`);
   });
 
   splashWindow.center();
 }
 
-// --- СОЗДАНИЕ ОСНОВНОГО ОКНА ---
+// --- MAIN WINDOW ---
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -62,9 +87,9 @@ function createMainWindow() {
     minWidth: 940,
     minHeight: 500,
     backgroundColor: '#0B0B0C',
-    frame: false, // Безрамочное
+    frame: false, // Безрамочное окно
     icon: getIconPath(),
-    show: false, // Скрыто пока не прогрузится
+    show: false, // Скрыто до полной загрузки
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -120,10 +145,10 @@ function createTray() {
   });
 }
 
-// --- ОБРАБОТЧИКИ IPC ---
+// --- IPC HANDLERS ---
 ipcMain.on('app-minimize', () => mainWindow?.minimize());
 ipcMain.on('app-maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
-ipcMain.on('app-close', () => mainWindow?.close());
+ipcMain.on('app-close', () => mainWindow?.close()); // Это вызовет событие 'close' выше
 ipcMain.on('flash-frame', () => { if(mainWindow && !mainWindow.isFocused()) mainWindow.flashFrame(true); });
 
 ipcMain.on('restart_app', () => {
@@ -139,43 +164,23 @@ autoUpdater.on('checking-for-update', () => sendStatusToSplash('Checking for upd
 autoUpdater.on('update-available', () => sendStatusToSplash('Update found. Downloading...'));
 autoUpdater.on('update-not-available', () => {
   sendStatusToSplash('Update not available. Starting...');
-  setTimeout(createMainWindow, 1000); // Задержка для красоты
+  setTimeout(createMainWindow, 1000);
 });
 autoUpdater.on('error', (err) => {
   sendStatusToSplash('Error checking updates.');
-  setTimeout(createMainWindow, 1000); // Все равно запускаем, даже если ошибка обновления
+  setTimeout(createMainWindow, 1000);
 });
 autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = 'Downloaded ' + Math.round(progressObj.percent) + '%';
-  sendStatusToSplash(log_message);
+  sendStatusToSplash('Downloaded ' + Math.round(progressObj.percent) + '%');
 });
 autoUpdater.on('update-downloaded', () => {
   sendStatusToSplash('Update downloaded');
-  // Если окно уже открыто - шлем туда, если нет - создаем и шлем
   if(mainWindow) {
       mainWindow.webContents.send('update_downloaded');
   } else {
       createMainWindow();
-      // Подождем пока загрузится и пошлем сигнал
       setTimeout(() => mainWindow.webContents.send('update_downloaded'), 3000);
   }
 });
 
-app.whenReady().then(() => {
-  session.defaultSession.setPermissionCheckHandler(() => true);
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(true));
-  
-  createSplashWindow();
-  
-  if (app.isPackaged) {
-      // Проверяем обновления только в собранном приложении
-      autoUpdater.checkForUpdates(); 
-  } else {
-      // В разработке сразу запускаем мейн через 2 сек
-      setTimeout(createMainWindow, 1500);
-  }
-});
-
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') { /* Keep running in tray */ } });
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createSplashWindow(); });
