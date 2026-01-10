@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import EmojiPicker from 'emoji-picker-react';
-// FIX: Use CJS import for better compatibility
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/cjs/styles/prism';
 import { 
@@ -16,7 +15,7 @@ import {
   Menu, Camera, Smile, Reply, Hash, LogOut, Minus, Square, 
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
   AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
-  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard
+  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
@@ -25,22 +24,21 @@ const SERVER_URL = "https://talkspace-7fwq.onrender.com";
 const socket = io(SERVER_URL);
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
-// Звуки
+// Sounds
 const msgSound = new Audio("./sounds/message.mp3");
 const callSound = new Audio("./sounds/call.mp3");
 callSound.loop = true;
 
-// Саундборд (предполагается наличие файлов в public/sounds/)
 const SOUNDS = ['bruh', 'airhorn', 'vine-boom', 'cricket', 'anime-wow'];
 
 const ThemeContext = createContext();
 
 const LOADING_FACTS = [
     "Используйте **жирный текст** для акцента.",
-    "Отправьте ссылку, чтобы увидеть превью.",
-    "В настройках голоса можно включить Push-to-Talk.",
-    "Блоки кода ```js code ``` автоматически подсвечиваются.",
-    "Нажмите правой кнопкой на сообщение, чтобы закрепить его."
+    "Зажмите микрофон для голосового сообщения.",
+    "Перетащите файл в окно чата для отправки.",
+    "Блоки кода ```js code ``` подсвечиваются.",
+    "Нажмите правой кнопкой на сообщение для действий."
 ];
 
 // --- GLOBAL STYLES ---
@@ -64,6 +62,7 @@ const GlobalStyles = () => (
             transition: background-color 5000s ease-in-out 0s;
         }
         .code-block { font-family: 'Consolas', monospace; font-size: 13px; }
+        .drag-overlay { background: rgba(88, 101, 242, 0.2); border: 2px dashed #5865F2; backdrop-filter: blur(2px); }
     `}</style>
 );
 
@@ -112,7 +111,7 @@ const CustomSelect = ({ options, value, onChange, placeholder }) => {
     );
 };
 
-// --- ОСНОВНЫЕ КОМПОНЕНТЫ ---
+// --- MAIN UI COMPONENTS ---
 
 function TitleBar() {
   if (!ipcRenderer) return null;
@@ -161,7 +160,7 @@ function UpdateNotification({ onRestart }) {
     );
 }
 
-// --- ГЛАВНОЕ ПРИЛОЖЕНИЕ ---
+// --- APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
@@ -390,11 +389,32 @@ const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateSta
 
 // --- CHAT COMPONENTS ---
 
+function EditMessageModal({ isOpen, onClose, initialText, onSave }) {
+    const [text, setText] = useState(initialText);
+    useEffect(() => setText(initialText), [initialText]);
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[200]">
+            <motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-xl w-full max-w-lg border border-white/10 shadow-2xl">
+                <h3 className="text-white font-bold text-lg mb-4">Редактировать сообщение</h3>
+                <textarea className="w-full bg-[#1E1F22] text-white p-3 rounded-lg outline-none h-32 resize-none" value={text} onChange={e=>setText(e.target.value)} />
+                <div className="flex justify-end gap-2 mt-4">
+                    <button onClick={onClose} className="px-4 py-2 text-gray-300 hover:underline text-sm font-medium">Отмена</button>
+                    <button onClick={()=>{onSave(text); onClose()}} className="px-6 py-2 bg-[var(--primary)] text-white rounded-lg text-sm font-bold hover:opacity-90">Сохранить</button>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
 function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType }) {
     const [text, setText] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
     const [mentionSearch, setMentionSearch] = useState(null);
     const [mentionIndex, setMentionIndex] = useState(0);
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorder = useRef(null);
+    const audioChunks = useRef([]);
 
     const handleKeyDown = (e) => {
         if (mentionSearch !== null) {
@@ -432,7 +452,35 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
         if(e.target.files[0]) {
             const fd = new FormData(); fd.append('file', e.target.files[0]);
             const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
-            onUpload(res.data.url);
+            onUpload(res.data.url, 'image');
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder.current = new MediaRecorder(stream);
+            audioChunks.current = [];
+            mediaRecorder.current.ondataavailable = (event) => audioChunks.current.push(event.data);
+            mediaRecorder.current.onstop = async () => {
+                const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
+                const fd = new FormData();
+                fd.append('file', audioBlob, 'voice.webm');
+                const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
+                onUpload(res.data.url, 'audio');
+            };
+            mediaRecorder.current.start();
+            setIsRecording(true);
+        } catch (e) {
+            console.error(e);
+            alert("Mic error");
+        }
+    };
+
+    const stopRecording = () => {
+        if(mediaRecorder.current) {
+            mediaRecorder.current.stop();
+            setIsRecording(false);
         }
     };
 
@@ -454,6 +502,7 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
             <div className="flex items-center gap-3 bg-[#111] p-2.5 px-4 rounded-lg border border-white/5 focus-within:border-white/20 transition-colors">
                 <label className="cursor-pointer text-[#B5BAC1] hover:text-[#DBDEE1] p-1"><Plus size={20} className="bg-[#2B2D31] rounded-full p-0.5"/><input type="file" hidden onChange={handleFile}/></label>
                 <input value={text} onChange={handleChange} onKeyDown={handleKeyDown} className="flex-1 bg-transparent outline-none text-[#DBDEE1] text-[15px] py-1 placeholder:text-[#555]" placeholder={placeholder} />
+                <button onClick={isRecording ? stopRecording : startRecording} className={`${isRecording ? 'text-red-500 animate-pulse' : 'text-[#B5BAC1]'} hover:text-white transition-colors`}><Mic size={24}/></button>
                 <button onClick={()=>setShowEmoji(!showEmoji)} className="text-[#B5BAC1] hover:text-[#E0C259] transition-colors"><Smile size={24}/></button>
                 <button onClick={()=>{onSend(text); setText("")}} className="text-[#B5BAC1] hover:text-[var(--primary)] transition-colors"><Send size={24}/></button>
             </div>
@@ -461,14 +510,19 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
     )
 }
 
-function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply }) {
+function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply, setEditMsg }) {
     const bottomRef = useRef();
     useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
     const Message = ({ m }) => {
         const isMe = m.senderId === user._id;
         const [context, setContext] = useState(null);
+        // New Message Separator (Dummy logic for now, assumes anything < 5 mins ago is new)
+        const isNew = (new Date() - new Date(m.createdAt)) < 5 * 60 * 1000 && !isMe;
+
         return (
+            <>
+            {isNew && <div className="flex items-center my-2"><div className="h-[1px] bg-red-500 flex-1"/><span className="text-[10px] text-red-500 font-bold px-2 uppercase">New</span><div className="h-[1px] bg-red-500 flex-1"/></div>}
             <div className={`group flex gap-4 px-4 py-2 hover:bg-[#111]/50 relative ${m.isPinned ? 'bg-yellow-900/10' : ''}`} onContextMenu={e=>{e.preventDefault(); setContext({x:e.clientX,y:e.clientY})}} onMouseLeave={()=>setContext(null)}>
                 {m.replyTo && (
                     <div className="absolute -top-3 left-14 flex items-center gap-1 opacity-60 text-xs">
@@ -486,6 +540,11 @@ function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply
                     </div>
                     {m.type === 'image' ? (
                         <img src={m.fileUrl} className="max-w-[400px] max-h-[300px] rounded-lg shadow-lg border border-white/5" alt="attachment"/>
+                    ) : m.type === 'audio' ? (
+                        <div className="bg-[#2B2D31] p-2 rounded flex items-center gap-3 w-64 border border-white/10">
+                            <div className="p-2 bg-[var(--primary)] rounded-full"><Play size={16} className="text-white"/></div>
+                            <audio controls src={m.fileUrl} className="w-full h-8"/>
+                        </div>
                     ) : (
                         <div className="text-[#DBDEE1] text-[15px] leading-relaxed break-words markdown-body">
                             <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
@@ -526,7 +585,7 @@ function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply
                     <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
                     <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
                     <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Reply size={16}/></button>
-                    {isMe && <button onClick={()=>onEdit(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Edit2 size={16}/></button>}
+                    {isMe && <button onClick={()=>setEditMsg(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Edit2 size={16}/></button>}
                     {isMe && <button onClick={()=>onDelete(m._id)} className="p-1 hover:bg-[#404249] rounded text-red-400 hover:text-red-500"><Trash size={16}/></button>}
                 </div>
 
@@ -536,6 +595,7 @@ function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply
                     </div>
                 )}
             </div>
+            </>
         );
     }
     return <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col pb-4">{messages.map(m => <Message key={m._id} m={m} />)}<div ref={bottomRef}/></div>
@@ -556,6 +616,10 @@ function ChatView({ user, noiseSuppression }) {
   const [isCamOn, setIsCamOn] = useState(false);
   const [isScreenOn, setIsScreenOn] = useState(false);
   const peerRef = useRef();
+  
+  // Fixes: Edit Modal & DragDrop
+  const [editMsg, setEditMsg] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   const friend = activeChat?.members?.find(m => m._id !== user._id);
 
@@ -586,9 +650,9 @@ function ChatView({ user, noiseSuppression }) {
     socket.emit('send_msg', { chatId: activeChat._id, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text', replyTo: replyTo ? { id: replyTo._id, text: replyTo.text, senderName: replyTo.senderName } : null });
     setReplyTo(null);
   }
-  const handleUpload = (url) => socket.emit('send_msg', { chatId: activeChat._id, text: "", senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'image', fileUrl: url });
+  const handleUpload = (url, type='image') => socket.emit('send_msg', { chatId: activeChat._id, text: "", senderId: user._id, senderName: user.displayName, avatar: user.avatar, type, fileUrl: url });
   const handleReact = (msgId, emoji) => axios.post(`${SERVER_URL}/api/message/react`, { chatId: activeChat._id, msgId, emoji, userId: user._id });
-  const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { chatId: activeChat._id, msgId: m._id, newText: t }); };
+  const handleEdit = (text) => { axios.post(`${SERVER_URL}/api/message/edit`, { chatId: activeChat._id, msgId: editMsg._id, newText: text }); setEditMsg(null); };
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
   const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { chatId: activeChat._id, msgId, isPinned });
 
@@ -623,24 +687,48 @@ function ChatView({ user, noiseSuppression }) {
   const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: true }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
   const shareScreen = async () => { if(!isScreenOn) { try { const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const st = ss.getVideoTracks()[0]; const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); if(sender) sender.replaceTrack(st); else peerRef.current.peerConnection.addTrack(st, localStream); st.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true); } catch(e) {} } };
 
+  // Drag & Drop
+  const onDrop = async (e) => {
+      e.preventDefault(); setIsDragging(false);
+      if(e.dataTransfer.files[0]) {
+          const fd = new FormData(); fd.append('file', e.dataTransfer.files[0]);
+          const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
+          handleUpload(res.data.url);
+      }
+  };
+
   if (!activeChat) return <div className="flex-1 flex items-center justify-center text-gray-500 font-bold animate-pulse">Загрузка...</div>;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#0B0B0C]">
+    <div 
+        className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#0B0B0C]"
+        onDragOver={(e)=>{e.preventDefault(); setIsDragging(true)}}
+        onDragLeave={()=>setIsDragging(false)}
+        onDrop={onDrop}
+    >
+      {isDragging && <div className="absolute inset-0 z-50 bg-[#5865F2]/20 border-4 border-dashed border-[#5865F2] flex items-center justify-center pointer-events-none"><h2 className="text-2xl font-bold text-white">Перетащите файлы сюда</h2></div>}
+      
       <div className="h-12 flex items-center justify-between px-4 border-b border-white/5 bg-[#111] shadow-sm z-20">
           <div className="flex items-center gap-3"><div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><StatusDot status={friend?.status}/></div><div><p className="font-bold text-white text-[15px]">{friend?.displayName}</p><p className="text-[12px] text-[#949BA4]">@{friend?.username}</p></div></div>
-          <div className="flex gap-4 text-[#B5BAC1]"><Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} /><Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} /></div>
+          <div className="flex items-center gap-4 text-[#B5BAC1]">
+              <Search size={20} className="hover:text-white cursor-pointer"/>
+              <div className="h-4 w-[1px] bg-white/10"/>
+              <Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} />
+              <Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} />
+          </div>
       </div>
       
       <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={toggleMic} toggleCam={toggleCam} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend}/>
       
-      <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
+      <MessageList messages={messages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
       
       {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
       
       {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
       
       <ChatInput onSend={handleSend} onUpload={handleUpload} onType={handleType} placeholder={`Написать @${friend?.displayName}`} members={activeChat.members} />
+      
+      {editMsg && <EditMessageModal isOpen={true} onClose={()=>setEditMsg(null)} initialText={editMsg.text} onSave={handleEdit}/>}
     </div>
   );
 }
@@ -658,6 +746,10 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
     const [replyTo, setReplyTo] = useState(null);
     const [speaking, setSpeaking] = useState(false); // Visual indicator
     const [showSoundboard, setShowSoundboard] = useState(false);
+    
+    // Fixes
+    const [editMsg, setEditMsg] = useState(null);
+    const [isDragging, setIsDragging] = useState(false);
 
     useEffect(() => { 
         socket.emit('join_server_room', serverId); 
@@ -688,10 +780,11 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
         setReplyTo(null);
     }
     const handleReact = (msgId, emoji) => axios.post(`${SERVER_URL}/api/message/react`, { serverId, channelId, msgId, emoji, userId: user._id });
-    const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { serverId, channelId, msgId: m._id, newText: t }); };
+    const handleEdit = (text) => { axios.post(`${SERVER_URL}/api/message/edit`, { serverId, channelId, msgId: editMsg._id, newText: text }); setEditMsg(null); };
     const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { serverId, channelId, msgId });
     const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { serverId, channelId, msgId, isPinned });
     const kickMember = async (id) => { if(server.owner === user._id) await axios.post(`${SERVER_URL}/api/kick-member`, { serverId, userId: id }); };
+    const handleUpload = (url, type='image') => socket.emit('send_msg', { serverId, channelId, text: "", senderId: user._id, senderName: user.displayName, avatar: user.avatar, type, fileUrl: url });
 
     const typingTimeout = useRef();
     const handleType = () => {
@@ -749,14 +842,33 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
 
     const playSound = (sound) => socket.emit('play_sound', { room: serverId, sound });
 
+    const onDrop = async (e) => {
+        e.preventDefault(); setIsDragging(false);
+        if(e.dataTransfer.files[0]) {
+            const fd = new FormData(); fd.append('file', e.dataTransfer.files[0]);
+            const res = await axios.post(`${SERVER_URL}/api/upload`, fd);
+            handleUpload(res.data.url);
+        }
+    };
+
     return (
         <div className="flex h-full bg-[#0B0B0C]">
-            <div className="flex-1 flex flex-col relative">
+            <div 
+                className="flex-1 flex flex-col relative"
+                onDragOver={(e)=>{e.preventDefault(); setIsDragging(true)}}
+                onDragLeave={()=>setIsDragging(false)}
+                onDrop={onDrop}
+            >
+                {isDragging && <div className="absolute inset-0 z-50 bg-[#5865F2]/20 border-4 border-dashed border-[#5865F2] flex items-center justify-center pointer-events-none"><h2 className="text-2xl font-bold text-white">Перетащите файлы сюда</h2></div>}
+
                 {channel?.type === 'text' ? (
                     <>
                         <div className="h-12 border-b border-white/5 flex items-center justify-between px-4 font-bold text-white shadow-sm">
                             <div className="flex items-center"><Hash size={24} className="mr-2 text-gray-500"/> {channel.name}</div>
-                            <button onClick={()=>setShowSoundboard(!showSoundboard)} className={`p-2 rounded hover:bg-[#333] transition-colors ${showSoundboard ? 'text-[var(--primary)]' : 'text-gray-400'}`}><Music size={20}/></button>
+                            <div className="flex items-center gap-2">
+                                <Search size={20} className="text-gray-400 hover:text-white cursor-pointer mr-2"/>
+                                <button onClick={()=>setShowSoundboard(!showSoundboard)} className={`p-2 rounded hover:bg-[#333] transition-colors ${showSoundboard ? 'text-[var(--primary)]' : 'text-gray-400'}`}><Music size={20}/></button>
+                            </div>
                         </div>
                         
                         {/* Soundboard Panel */}
@@ -770,10 +882,12 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
                         )}
                         </AnimatePresence>
 
-                        <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
+                        <MessageList messages={messages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
                         {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
                         {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
-                        <ChatInput onSend={handleSend} onUpload={()=>{}} onType={handleType} placeholder={`Написать в #${channel.name}`} members={server?.members || []} roomId={serverId} />
+                        <ChatInput onSend={handleSend} onUpload={handleUpload} onType={handleType} placeholder={`Написать в #${channel.name}`} members={server?.members || []} roomId={serverId} />
+                        
+                        {editMsg && <EditMessageModal isOpen={true} onClose={()=>setEditMsg(null)} initialText={editMsg.text} onSave={handleEdit}/>}
                     </>
                 ) : (
                     <div className="flex-1 flex items-center justify-center flex-col text-center">
@@ -814,9 +928,21 @@ function FriendsView({ user, refresh }) {
     const sendRequest = async () => { setError(""); setSuccess(""); try { if(!friendInput) return; await axios.post(`${SERVER_URL}/api/friend-request`, { fromId: user._id, targetUsername: friendInput }); setSuccess(`Запрос отправлен ${friendInput}!`); setFriendInput(""); } catch (e) { setError(e.response?.data?.error || "Пользователь не найден"); } };
     const handleInput = (e) => { setFriendInput(e.target.value); setError(""); setSuccess(""); };
     const borderClass = error ? 'border-red-500' : success ? 'border-green-500' : 'border-[#333] focus-within:border-[var(--primary)]';
+    
+    // BADGE LOGIC
+    const pendingCount = user?.requests?.length || 0;
+
     return (
       <div className="flex flex-col h-full bg-[#0B0B0C]">
-        <div className="h-12 flex items-center px-6 border-b border-white/5 gap-6 shadow-sm"><div className="flex items-center gap-2 text-white font-bold"><Users size={20} /><span>Друзья</span></div><div className="h-6 w-[1px] bg-white/10"/><div className="flex gap-2">{['all', 'pending', 'add'].map(t => (<button key={t} onClick={() => {setTab(t); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors ${tab === t ? (t==='add'?'text-[#23A559] bg-transparent':'bg-[#333] text-white') : (t==='add'?'bg-[#23A559] text-white px-3':'text-[#B5BAC1] hover:bg-[#222] hover:text-[#DBDEE1]')}`}>{t === 'all' ? 'Все' : t === 'pending' ? `Ожидание (${user?.requests?.length || 0})` : 'Добавить друга'}</button>))}</div></div>
+        <div className="h-12 flex items-center px-6 border-b border-white/5 gap-6 shadow-sm"><div className="flex items-center gap-2 text-white font-bold"><Users size={20} /><span>Друзья</span></div><div className="h-6 w-[1px] bg-white/10"/>
+        <div className="flex gap-2">
+            <button onClick={() => {setTab('all'); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors ${tab === 'all' ? 'bg-[#333] text-white' : 'text-[#B5BAC1] hover:bg-[#222] hover:text-[#DBDEE1]'}`}>Все</button>
+            <button onClick={() => {setTab('pending'); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors flex items-center gap-2 ${tab === 'pending' ? 'bg-[#333] text-white' : 'text-[#B5BAC1] hover:bg-[#222] hover:text-[#DBDEE1]'}`}>
+                Ожидание 
+                {pendingCount > 0 && <span className="bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold">{pendingCount}</span>}
+            </button>
+            <button onClick={() => {setTab('add'); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors ${tab === 'add' ? 'text-[#23A559] bg-transparent' : 'bg-[#23A559] text-white px-3'}`}>Добавить друга</button>
+        </div></div>
         <div className="p-8 overflow-y-auto">
           {tab === 'all' && ( <>{user?.friends?.map(f => (<div key={f._id} onClick={() => navigate(`/chat/${f._id}`)} className="flex items-center justify-between p-2.5 hover:bg-[#111] rounded-lg cursor-pointer group border-t border-white/5 border-opacity-50"><div className="flex items-center gap-3"><img src={f.avatar} className="w-8 h-8 rounded-full object-cover" alt="av" /><div><p className="font-bold text-white text-[15px]">{f.displayName} <span className="hidden group-hover:inline text-[#949BA4] text-xs font-medium">@{f.username}</span></p><p className="text-[11px] text-[#949BA4] font-bold">{f.status}</p></div></div><div className="p-2 bg-[#222] rounded-full text-[#B5BAC1] group-hover:text-[#DBDEE1]"><MessageSquare size={18} /></div></div>))}</>)}
           {tab === 'add' && (<div className="w-full max-w-2xl"><h3 className="text-white font-bold text-base mb-2 uppercase">Добавить друга</h3><p className="text-[#B5BAC1] text-sm mb-4">Вы можете добавить друзей по имени пользователя.</p><div className={`bg-[#111] p-2.5 rounded-xl border flex items-center transition-all ${borderClass}`}><input value={friendInput} onChange={handleInput} className="bg-transparent flex-1 p-1 outline-none text-white text-sm placeholder:text-gray-500" placeholder="Имя пользователя" /><button onClick={sendRequest} disabled={!friendInput} className={`px-6 py-2 rounded-lg text-xs font-bold text-white transition-colors ${friendInput ? 'bg-[#5865F2] hover:bg-[#4752c4]' : 'bg-[#222] cursor-not-allowed opacity-50'}`}>Отправить запрос</button></div>{success && <p className="text-[#23A559] text-sm mt-2 font-medium">{success}</p>}{error && <p className="text-[#F23F43] text-sm mt-2 font-medium">{error}</p>}</div>)}

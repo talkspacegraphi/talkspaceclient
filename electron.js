@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const url = require('url');
@@ -17,16 +17,20 @@ let splashWindow;
 let tray = null;
 let isQuitting = false;
 
+// SINGLE INSTANCE LOCK
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
+  console.log("Another instance is already running. Quitting...");
   app.quit();
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Пользователь пытался запустить вторую копию
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
+      
       const deepLink = commandLine.find((arg) => arg.startsWith('talkspace://'));
       if (deepLink) mainWindow.webContents.send('deep-link', deepLink);
     }
@@ -75,11 +79,10 @@ function createMainWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       webSecurity: false,
-      devTools: true // Оставляем включенным на случай ошибок React
+      devTools: true
     },
   });
 
-  // ВАЖНО: Используем path.resolve для точного пути к файлу
   const startUrl = app.isPackaged 
     ? url.format({
         pathname: path.resolve(__dirname, 'build', 'index.html'), 
@@ -97,6 +100,12 @@ function createMainWindow() {
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) { event.preventDefault(); mainWindow.hide(); return false; }
+  });
+  
+  // Open links in external browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      shell.openExternal(url);
+      return { action: 'deny' };
   });
 
   createTray();

@@ -1,6 +1,6 @@
 {
   "name": "talkspace",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": false,
   "main": "electron.js",
   "homepage": "./",
@@ -42,14 +42,15 @@
   },
   "build": {
     "extends": null,
-    "appId": "com.talkspace.app",
+    "appId": "com.talkspace.messenger.app",
     "productName": "TalkSpace",
     "extraMetadata": {
       "homepage": "https://github.com/talkspacegraphi/talkspaceclient"
     },
     "files": [
       "build/**/*",
-      "electron.js"
+      "electron.js",
+      "package.json"
     ],
     "extraResources": [
       {
@@ -66,21 +67,18 @@
     },
     "win": {
       "target": [
-        "squirrel"
+        "nsis"
       ],
       "icon": "public/favicon.ico"
     },
-    "squirrelWindows": {
-      "iconUrl": "https://github.com/talkspacegraphi/talkspaceclient/blob/main/public/favicon.ico?raw=true"
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TalkSpace",
+      "runAfterFinish": true
     },
-    "protocols": [
-      {
-        "name": "TalkSpace URL",
-        "schemes": [
-          "talkspace"
-        ]
-      }
-    ],
     "publish": [
       {
         "provider": "github",
