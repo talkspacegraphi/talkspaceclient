@@ -16,22 +16,18 @@ import {
   DownloadCloud
 } from 'lucide-react';
 
-// --- IPC СВЯЗЬ С ELECTRON ---
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
 
-// --- КОНФИГУРАЦИЯ ---
 const SERVER_URL = "https://talkspace-7fwq.onrender.com"; 
 const socket = io(SERVER_URL);
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
-// ЗВУКИ
 const msgSound = new Audio("./sounds/message.mp3");
 const callSound = new Audio("./sounds/call.mp3");
 callSound.loop = true;
 
 const ThemeContext = createContext();
 
-// ФАКТЫ ЗАГРУЗКИ
 const LOADING_FACTS = [
     "Используйте **жирный текст** для акцента.",
     "Вы можете создать свой сервер и пригласить друзей.",
@@ -40,9 +36,8 @@ const LOADING_FACTS = [
     "TalkSpace поддерживает демонстрацию экрана в HD."
 ];
 
-// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ UI (ВЫНЕСЕНЫ НАРУЖУ) ---
+// --- HELPER COMPONENTS (ВЫНЕСЕНЫ ИЗ ФУНКЦИЙ) ---
 
-// 1. Поле ввода (Исправлен баг с фокусом)
 const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
     <div className="mb-4">
         <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-[#B5BAC1]'}`}>
@@ -58,7 +53,6 @@ const Input = ({ label, value, onChange, type="text", required=false, errorMsg }
     </div>
 );
 
-// 2. Кастомный Селект (Для даты рождения)
 const CustomSelect = ({ options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
@@ -154,9 +148,7 @@ function UpdateBanner() {
 function BackgroundEffect() {
     return (
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#0B0B0C]">
-          {/* Статичный фон паттерн (как в дискорде) */}
           <div className="absolute inset-0 bg-[url('https://discord.com/assets/843b08e5830058e3789a24d9c79e6079.svg')] bg-cover opacity-5"></div>
-          {/* Анимированные пятна */}
           <motion.div animate={{ x: [0, 100, 0], y: [0, -50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 15, repeat: Infinity }} className="absolute top-0 left-0 w-[60vw] h-[60vw] bg-purple-900 rounded-full blur-[150px]" />
           <motion.div animate={{ x: [0, -100, 0], y: [0, 50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 18, repeat: Infinity }} className="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-blue-900 rounded-full blur-[150px]" />
       </div>
@@ -213,97 +205,6 @@ export default function App() {
   );
 }
 
-// --- АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ---
-function Auth({ onAuth }) {
-  const [isLogin, setIsLogin] = useState(true);
-  
-  const [loginData, setLoginData] = useState({ login: '', password: '' });
-  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
-  const [usernameStatus, setUsernameStatus] = useState(null); 
-  const [error, setError] = useState("");
-
-  // Проверка имени пользователя
-  useEffect(() => {
-      if(isLogin || !regData.username) return;
-      const timeout = setTimeout(async () => {
-          try {
-             const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username });
-             setUsernameStatus(res.data.available ? 'free' : 'taken');
-          } catch(e) {}
-      }, 500);
-      return () => clearTimeout(timeout);
-  }, [regData.username, isLogin]);
-
-  const handleLogin = async () => {
-      try {
-          const res = await axios.post(`${SERVER_URL}/api/login`, loginData);
-          onAuth(res.data);
-      } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); }
-  };
-
-  const handleRegister = async () => {
-      try {
-          if(usernameStatus !== 'free') return setError("Имя пользователя занято");
-          if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения");
-          
-          const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } });
-          onAuth(res.data);
-      } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); }
-  };
-
-  return (
-    <div className="h-screen flex items-center justify-center relative bg-[#0B0B0C] overflow-hidden">
-      <BackgroundEffect />
-      
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-[5px] shadow-2xl w-full max-w-[480px] z-10 relative">
-        {isLogin ? (
-            <>
-                <h2 className="text-2xl font-bold text-white text-center mb-2">С возвращением!</h2>
-                <p className="text-[#B5BAC1] text-center text-[15px] mb-6">Мы так рады видеть вас снова!</p>
-                
-                <Input label="Адрес электронной почты или имя пользователя" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})}/>
-                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
-                
-                <div className="text-[#00A8FC] text-xs font-medium cursor-pointer mb-6 hover:underline">Забыли пароль?</div>
-                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all mb-2 text-sm">Вход</button>
-                <div className="text-xs text-[#949BA4] mt-2">Нужна учетная запись? <span onClick={()=>{setIsLogin(false); setError("")}} className="text-[#00A8FC] cursor-pointer hover:underline ml-1">Зарегистрироваться</span></div>
-            </>
-        ) : (
-            <div className="max-h-[85vh] overflow-y-auto no-scrollbar pr-1">
-                <h2 className="text-2xl font-bold text-white text-center mb-6">Создать учетную запись</h2>
-                
-                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
-                <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
-                
-                <div className="mb-4">
-                    <label className={`block text-[11px] font-bold uppercase mb-1.5 ${usernameStatus==='taken'?'text-red-400':'text-[#B5BAC1]'}`}>Имя пользователя <span className="text-red-400">*</span></label>
-                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium" />
-                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-medium">Супер! Это имя свободно.</p>}
-                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-medium">Имя занято.</p>}
-                </div>
-
-                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
-                
-                <div className="mb-6">
-                    <label className="block text-[11px] font-bold uppercase text-[#B5BAC1] mb-1.5">Дата рождения <span className="text-red-400">*</span></label>
-                    <div className="flex gap-3">
-                        <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
-                        <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
-                        <div className="w-[30%]"><CustomSelect placeholder="Год" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
-                    </div>
-                </div>
-
-                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all text-sm">Продолжить</button>
-                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-medium text-left" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
-            </div>
-        )}
-        {error && <div className="mt-4 bg-[#F23F43] text-white p-2 rounded text-xs font-medium text-center">{error}</div>}
-      </motion.div>
-    </div>
-  );
-}
-
-// --- ОСНОВНОЙ ЛЕЙАУТ ---
 function MainLayout({ user, setUser, onLogout }) {
   const navigate = useNavigate();
   const [showSettings, setShowSettings] = useState(false);
@@ -406,7 +307,7 @@ function MainLayout({ user, setUser, onLogout }) {
 
 const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
     <>
-        <div className="h-12 flex items-center px-4 font-bold text-white border-b border-[#1F2023] shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
+        <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-all ${window.location.hash.includes('/friends') ? 'bg-[#404249] text-white' : 'text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>
             <Users size={20} /> <span className="text-[15px] font-medium">Друзья</span>
@@ -708,14 +609,8 @@ function ChatView({ user, noiseSuppression }) {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#313338]">
       <div className="h-12 flex items-center justify-between px-4 border-b border-[#26272D] bg-[#313338] shadow-sm z-20">
-          <div className="flex items-center gap-3">
-             <div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><StatusDot status={friend?.status}/></div>
-             <div><p className="font-bold text-white text-[15px]">{friend?.displayName}</p><p className="text-[12px] text-[#949BA4]">@{friend?.username}</p></div>
-          </div>
-          <div className="flex gap-4 text-[#B5BAC1]">
-            <Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} />
-            <Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} />
-          </div>
+          <div className="flex items-center gap-3"><div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><StatusDot status={friend?.status}/></div><div><p className="font-bold text-white text-[15px]">{friend?.displayName}</p><p className="text-[12px] text-[#949BA4]">@{friend?.username}</p></div></div>
+          <div className="flex gap-4 text-[#B5BAC1]"><Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} /><Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} /></div>
       </div>
       <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={toggleMic} toggleCam={toggleCam} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend}/>
       <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} />
@@ -733,14 +628,15 @@ function ServerView({ user, noiseSuppression }) {
     const [messages, setMessages] = useState(channel?.messages || []);
     const [inVoice, setInVoice] = useState(false);
 
-    useEffect(() => {
-        socket.emit('join_server_room', serverId);
-        setMessages(channel?.messages || []);
-    }, [channelId, serverId, channel]);
-
+    useEffect(() => { socket.emit('join_server_room', serverId); setMessages(channel?.messages || []); }, [channelId, serverId, channel]);
     socket.on('new_server_msg', (m) => { if(m.channelId === channelId) setMessages(p => [...p, m]); });
+    socket.on('new_server_msg_update', (d) => { if(d.channelId === channelId) setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)); });
+    socket.on('new_server_msg_delete', (d) => { if(d.channelId === channelId) setMessages(p => p.filter(m => m._id !== d.msgId)); });
 
     const handleSend = (text) => socket.emit('send_msg', { serverId, channelId, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text' });
+    const handleReact = (msgId, emoji) => axios.post(`${SERVER_URL}/api/message/react`, { serverId, channelId, msgId, emoji, userId: user._id });
+    const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { serverId, channelId, msgId: m._id, newText: t }); };
+    const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { serverId, channelId, msgId });
     const kickMember = async (id) => { if(server.owner === user._id) await axios.post(`${SERVER_URL}/api/kick-member`, { serverId, userId: id }); };
 
     return (
@@ -749,33 +645,19 @@ function ServerView({ user, noiseSuppression }) {
                 {channel?.type === 'text' ? (
                     <>
                         <div className="h-12 border-b border-[#26272D] flex items-center px-4 font-bold text-white shadow-sm"><Hash size={24} className="mr-2 text-[#949BA4]"/> {channel.name}</div>
-                        <MessageList messages={messages} user={user} onReact={()=>{}} onEdit={()=>{}} onDelete={()=>{}} />
+                        <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} />
                         <ChatInput onSend={handleSend} onUpload={()=>{}} placeholder={`Написать в #${channel.name}`} />
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center flex-col text-center">
-                        <Volume2 size={64} className="text-[#404249] mb-6"/>
-                        <h2 className="text-2xl font-bold mb-4 text-white">Голосовой канал: {channel?.name}</h2>
-                        {!inVoice ? (
-                            <button onClick={()=>setInVoice(true)} className="bg-[#5865F2] px-8 py-2.5 rounded text-white font-bold hover:bg-[#4752C4] transition-all">Подключиться</button>
-                        ) : (
-                            <div className="text-center">
-                                <p className="text-green-400 mb-4 font-bold">Вы подключены</p>
-                                <button onClick={()=>setInVoice(false)} className="bg-[#F23F43] px-8 py-2.5 rounded text-white font-bold hover:bg-[#D9363A] transition-all">Отключиться</button>
-                            </div>
-                        )}
-                    </div>
+                    <div className="flex-1 flex items-center justify-center flex-col text-center"><Volume2 size={64} className="text-[#404249] mb-6"/><h2 className="text-2xl font-bold mb-4 text-white">Голосовой канал: {channel?.name}</h2>{!inVoice ? (<button onClick={()=>setInVoice(true)} className="bg-[#5865F2] px-8 py-2.5 rounded text-white font-bold hover:bg-[#4752C4] transition-all">Подключиться</button>) : (<div className="text-center"><p className="text-green-400 mb-4 font-bold">Вы подключены</p><button onClick={()=>setInVoice(false)} className="bg-[#F23F43] px-8 py-2.5 rounded text-white font-bold hover:bg-[#D9363A] transition-all">Отключиться</button></div>)}</div>
                 )}
             </div>
-            <div className="w-60 bg-[#2B2D31] p-4 overflow-y-auto">
-                <h3 className="text-xs font-bold text-[#949BA4] uppercase mb-4">Участники — {server?.members?.length}</h3>
+            <div className="w-60 bg-[#2B2D31] p-4 overflow-y-auto border-l border-white/5">
+                <h3 className="text-xs font-bold text-[#949BA4] uppercase mb-4 tracking-widest">Участники — {server?.members?.length}</h3>
                 {server?.members?.map(m => (
-                    <div key={m._id} onContextMenu={(e)=>{e.preventDefault(); if(server.owner===user._id && m._id!==user._id) if(window.confirm("Кикнуть?")) kickMember(m._id)}} className="flex items-center gap-2 mb-2 p-1.5 hover:bg-[#35373C] rounded cursor-pointer opacity-90 hover:opacity-100 transition-all">
+                    <div key={m._id} onContextMenu={(e)=>{e.preventDefault(); if(server.owner===user._id && m._id!==user._id) if(window.confirm("Кикнуть?")) kickMember(m._id)}} className="flex items-center gap-2 mb-2 p-1.5 hover:bg-[#35373C] rounded-lg cursor-pointer opacity-90 hover:opacity-100 transition-all">
                         <img src={m.avatar} className="w-8 h-8 rounded-full bg-zinc-800 object-cover" alt="av"/>
-                        <div>
-                            <p className={`font-bold text-sm ${server.owner===m._id ? 'text-[#F0B232]' : 'text-[#DBDEE1]'}`}>{m.displayName} {server.owner===m._id && <Crown size={12} className="inline ml-1"/>}</p>
-                            <p className="text-[11px] text-[#949BA4] font-medium">{m.status}</p>
-                        </div>
+                        <div><p className={`font-bold text-sm ${server.owner===m._id ? 'text-[#F0B232]' : 'text-[#DBDEE1]'}`}>{m.displayName} {server.owner===m._id && <Crown size={12} className="inline ml-1"/>}</p><p className="text-[10px] text-[#949BA4] font-medium">{m.status}</p></div>
                     </div>
                 ))}
             </div>
@@ -789,56 +671,16 @@ function FriendsView({ user, refresh }) {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState(""); 
     const navigate = useNavigate();
-  
-    const sendRequest = async () => {
-        setError(""); setSuccess("");
-        try {
-            if(!friendInput) return;
-            await axios.post(`${SERVER_URL}/api/friend-request`, { fromId: user._id, targetUsername: friendInput });
-            setSuccess(`Запрос отправлен ${friendInput}!`); setFriendInput("");
-        } catch (e) { setError(e.response?.data?.error || "Пользователь не найден"); }
-    };
-    
+    const sendRequest = async () => { setError(""); setSuccess(""); try { if(!friendInput) return; await axios.post(`${SERVER_URL}/api/friend-request`, { fromId: user._id, targetUsername: friendInput }); setSuccess(`Запрос отправлен ${friendInput}!`); setFriendInput(""); } catch (e) { setError(e.response?.data?.error || "Пользователь не найден"); } };
     const handleInput = (e) => { setFriendInput(e.target.value); setError(""); setSuccess(""); };
     const borderClass = error ? 'border-red-500' : success ? 'border-green-500' : 'border-[#1E1F22] focus-within:border-[#00A8FC]';
-
     return (
       <div className="flex flex-col h-full bg-[#313338]">
-        <div className="h-12 flex items-center px-6 border-b border-[#1F2023] gap-6 shadow-sm">
-          <div className="flex items-center gap-2 text-white font-bold"><Users size={20} /><span>Друзья</span></div>
-          <div className="h-6 w-[1px] bg-[#3F4147]"/>
-          <div className="flex gap-2">
-              {['all', 'pending', 'add'].map(t => (
-              <button key={t} onClick={() => {setTab(t); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors ${tab === t ? (t==='add'?'text-[#23A559] bg-transparent':'bg-[#404249] text-white') : (t==='add'?'bg-[#23A559] text-white px-3':'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]')}`}>
-                  {t === 'all' ? 'Все' : t === 'pending' ? 'Ожидание' : 'Добавить друга'}
-              </button>
-              ))}
-          </div>
-        </div>
+        <div className="h-12 flex items-center px-6 border-b border-[#1F2023] gap-6 shadow-sm"><div className="flex items-center gap-2 text-white font-bold"><Users size={20} /><span>Друзья</span></div><div className="h-6 w-[1px] bg-[#3F4147]"/><div className="flex gap-2">{['all', 'pending', 'add'].map(t => (<button key={t} onClick={() => {setTab(t); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors ${tab === t ? (t==='add'?'text-[#23A559] bg-transparent':'bg-[#404249] text-white') : (t==='add'?'bg-[#23A559] text-white px-3':'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]')}`}>{t === 'all' ? 'Все' : t === 'pending' ? `Ожидание (${user?.requests?.length || 0})` : 'Добавить друга'}</button>))}</div></div>
         <div className="p-8 overflow-y-auto">
-          {tab === 'all' && (
-              <>
-                <p className="text-xs font-bold text-[#B5BAC1] uppercase mb-4 tracking-wide">Все друзья — {user?.friends?.length || 0}</p>
-                {user?.friends?.map(f => (
-                    <div key={f._id} onClick={() => navigate(`/chat/${f._id}`)} className="flex items-center justify-between p-2.5 hover:bg-[#35373C] rounded-lg cursor-pointer group border-t border-[#3F4147] border-opacity-50">
-                        <div className="flex items-center gap-3"><img src={f.avatar} className="w-8 h-8 rounded-full object-cover" alt="av" /><div><p className="font-bold text-white text-[15px]">{f.displayName} <span className="hidden group-hover:inline text-[#949BA4] text-xs font-medium">@{f.username}</span></p><p className="text-[11px] text-[#949BA4] font-bold">{f.status}</p></div></div>
-                        <div className="p-2 bg-[#2B2D31] rounded-full text-[#B5BAC1] group-hover:text-[#DBDEE1]"><MessageSquare size={18} /></div>
-                    </div>
-                ))}
-              </>
-          )}
-          {tab === 'add' && (
-            <div className="w-full max-w-2xl">
-              <h3 className="text-white font-bold text-base mb-2 uppercase">Добавить друга</h3>
-              <p className="text-[#B5BAC1] text-sm mb-4">Вы можете добавить друзей по имени пользователя.</p>
-              <div className={`bg-[#1E1F22] p-2 rounded-lg border flex items-center transition-all ${borderClass}`}><input value={friendInput} onChange={handleInput} className="bg-transparent flex-1 p-2 outline-none text-white text-[15px] placeholder:text-[#87898C]" placeholder="Имя пользователя" /><button onClick={sendRequest} disabled={!friendInput} className={`px-4 py-1.5 rounded text-sm font-medium text-white transition-colors ${friendInput ? 'bg-[#5865F2] hover:bg-[#4752c4]' : 'bg-[#3B405A] cursor-not-allowed opacity-50'}`}>Отправить запрос</button></div>
-              {success && <p className="text-[#23A559] text-sm mt-2 font-medium">{success}</p>}
-              {error && <p className="text-[#F23F43] text-sm mt-2 font-medium">{error}</p>}
-            </div>
-          )}
-          {tab === 'pending' && user?.requests?.map(r => (
-              <div key={r.from} className="flex items-center justify-between p-3 hover:bg-[#35373C] rounded-lg border-t border-[#3F4147]"><div className="flex items-center gap-3"><img src={r.avatar} className="w-8 h-8 rounded-full" alt="av"/><div><p className="font-bold text-white text-sm">{r.displayName}</p><p className="text-xs text-[#949BA4]">Входящий запрос</p></div></div><div className="flex gap-2"><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'accept' }); refresh(); }} className="p-2 bg-[#2B2D31] hover:text-[#23A559] rounded-full"><Check size={18}/></button><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'decline' }); refresh(); }} className="p-2 bg-[#2B2D31] hover:text-[#F23F43] rounded-full"><X size={18}/></button></div></div>
-          ))}
+          {tab === 'all' && ( <>{user?.friends?.map(f => (<div key={f._id} onClick={() => navigate(`/chat/${f._id}`)} className="flex items-center justify-between p-2.5 hover:bg-[#35373C] rounded-lg cursor-pointer group border-t border-[#3F4147] border-opacity-50"><div className="flex items-center gap-3"><img src={f.avatar} className="w-8 h-8 rounded-full object-cover" alt="av" /><div><p className="font-bold text-white text-[15px]">{f.displayName} <span className="hidden group-hover:inline text-[#949BA4] text-xs font-medium">@{f.username}</span></p><p className="text-[11px] text-[#949BA4] font-bold">{f.status}</p></div></div><div className="p-2 bg-[#2B2D31] rounded-full text-[#B5BAC1] group-hover:text-[#DBDEE1]"><MessageSquare size={18} /></div></div>))}</>)}
+          {tab === 'add' && (<div className="w-full max-w-2xl"><h3 className="text-white font-bold text-base mb-2 uppercase">Добавить друга</h3><p className="text-[#B5BAC1] text-sm mb-4">Вы можете добавить друзей по имени пользователя.</p><div className={`bg-[#1E1F22] p-2.5 rounded-xl border-2 flex items-center transition-all ${borderClass}`}><input value={friendInput} onChange={handleInput} className="bg-transparent flex-1 p-1 outline-none text-white text-sm placeholder:text-gray-500" placeholder="Имя пользователя" /><button onClick={sendRequest} disabled={!friendInput} className={`px-6 py-2 rounded-lg text-xs font-bold text-white transition-colors ${friendInput ? 'bg-[#5865F2] hover:bg-[#4752c4]' : 'bg-[#3B405A] cursor-not-allowed opacity-50'}`}>Отправить запрос</button></div>{success && <p className="text-[#23A559] text-sm mt-2 font-medium">{success}</p>}{error && <p className="text-[#F23F43] text-sm mt-2 font-medium">{error}</p>}</div>)}
+          {tab === 'pending' && user?.requests?.map(r => (<div key={r.from} className="flex items-center justify-between p-3 hover:bg-[#35373C] rounded-lg border-t border-[#3F4147]"><div className="flex items-center gap-3"><img src={r.avatar} className="w-8 h-8 rounded-full" alt="av"/><div><p className="font-bold text-white text-sm">{r.displayName}</p><p className="text-xs text-[#949BA4]">Входящий запрос</p></div></div><div className="flex gap-2"><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'accept' }); refresh(); }} className="p-2 bg-[#2B2D31] hover:text-[#23A559] rounded-full"><Check size={18}/></button><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'decline' }); refresh(); }} className="p-2 bg-[#2B2D31] hover:text-[#F23F43] rounded-full"><X size={18}/></button></div></div>))}
         </div>
       </div>
     );
@@ -846,25 +688,8 @@ function FriendsView({ user, refresh }) {
 
 function CreateServerModal({ user, onClose, refresh }) {
     const [name, setName] = useState("");
-    const create = async () => {
-        if(!name) return;
-        await axios.post(`${SERVER_URL}/api/create-server`, { name, owner: user._id });
-        refresh(); onClose();
-    };
-    return (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[500]">
-            <motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-[5px] text-center w-full max-w-sm shadow-2xl">
-                <h2 className="text-2xl font-bold text-white mb-2">Создать сервер</h2>
-                <p className="text-[#B5BAC1] text-[15px] mb-6 px-4">Сервер — это место, где вы можете общаться с друзьями.</p>
-                <div className="uppercase text-xs font-bold text-[#B5BAC1] mb-2 text-left">Название сервера</div>
-                <input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none mb-6 text-[15px]" />
-                <div className="flex justify-between items-center">
-                    <button onClick={onClose} className="text-[#B5BAC1] hover:underline text-sm font-medium">Назад</button>
-                    <button onClick={create} className="bg-[#5865F2] hover:bg-[#4752c4] px-6 py-2.5 rounded-[3px] text-white font-medium text-sm transition-all">Создать</button>
-                </div>
-            </motion.div>
-        </div>
-    )
+    const create = async () => { if(!name) return; await axios.post(`${SERVER_URL}/api/create-server`, { name, owner: user._id }); refresh(); onClose(); };
+    return (<div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[500]"><motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-3xl text-center w-full max-w-sm shadow-2xl border border-white/10"><h2 className="text-2xl font-black text-white mb-2">Создать сервер</h2><p className="text-gray-400 text-xs mb-6 px-4">Сервер — это место, где вы можете общаться с друзьями.</p><div className="uppercase text-[10px] font-black text-gray-400 mb-2 text-left tracking-widest">Название сервера</div><input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none mb-6 text-sm" /><div className="flex justify-between items-center"><button onClick={onClose} className="text-gray-300 hover:underline text-sm font-bold">Назад</button><button onClick={create} className="bg-[#5865F2] hover:bg-[#4752c4] px-8 py-2.5 rounded-xl text-white font-bold text-sm transition-all shadow-lg">Создать</button></div></motion.div></div>)
 }
 
 function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
@@ -876,194 +701,61 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
     const [email, setEmail] = useState(user?.email || "");
     const [newPass, setNewPass] = useState("");
     const [currPass, setCurrPass] = useState("");
-
-    const saveProfile = async () => {
-        const fd = new FormData(); fd.append('userId', user._id); fd.append('displayName', displayName); fd.append('bio', bio); fd.append('bannerColor', banner);
-        if(file) fd.append('avatar', file);
-        try { const res = await axios.post(`${SERVER_URL}/api/update-profile`, fd); setUser(res.data); localStorage.setItem('user', JSON.stringify(res.data)); localStorage.setItem('noiseSuppression', noise); onClose(); } catch(e) { alert("Ошибка"); }
-    };
-
-    const saveAccount = async () => {
-        try {
-            await axios.post(`${SERVER_URL}/api/update-account`, { userId: user._id, email, newPassword: newPass, currentPassword: currPass });
-            alert("Аккаунт обновлен!"); onClose();
-        } catch(e) { alert(e.response?.data?.error || "Ошибка"); }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8">
-             <motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[5px] flex overflow-hidden shadow-2xl">
-                 <div className="w-60 bg-[#2B2D31] p-4 pt-10 flex flex-col items-end">
-                     <div className="w-44 space-y-0.5">
-                         <p className="uppercase text-xs font-bold text-[#949BA4] px-2 mb-2">Настройки пользователя</p>
-                         <div onClick={()=>setActiveTab('account')} className={`px-2 py-1.5 rounded-[4px] text-[15px] font-medium cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>Моя учетная запись</div>
-                         <div onClick={()=>setActiveTab('profile')} className={`px-2 py-1.5 rounded-[4px] text-[15px] font-medium cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>Профиль</div>
-                         <div className="h-[1px] bg-[#3F4147] my-2 mx-2"/>
-                         <div onClick={onLogout} className="text-[#F23F43] hover:bg-[#F23F43]/10 px-2 py-1.5 rounded-[4px] text-[15px] font-medium cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div>
-                     </div>
-                 </div>
-
-                 <div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]">
-                    <div onClick={onClose} className="absolute top-4 right-4 flex flex-col items-center cursor-pointer group text-[#B5BAC1] hover:text-[#DBDEE1]">
-                        <div className="border-2 border-[#B5BAC1] group-hover:border-[#DBDEE1] rounded-full p-1"><X size={18}/></div>
-                        <span className="text-[10px] font-bold mt-1 uppercase">ESC</span>
-                    </div>
-                    
-                    {activeTab === 'account' && (
-                        <>
-                            <h2 className="text-xl font-bold text-white mb-6">Моя учетная запись</h2>
-                            <div className="bg-[#1E1F22] rounded-lg p-4 mb-8 flex items-center gap-4 relative overflow-hidden">
-                                <div className="h-24 w-full absolute top-0 left-0 bg-[#000]" style={{backgroundColor: user?.bannerColor || '#000'}}/>
-                                <div className="relative z-10 flex items-center gap-4 w-full pt-12 px-2">
-                                    <div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111] border-[6px] border-[#1E1F22]" alt="av"/><div className="absolute bottom-1 right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div>
-                                    <div className="mt-4">
-                                        <h3 className="text-xl font-bold text-white">{user?.displayName}</h3>
-                                        <p className="text-sm text-[#B5BAC1]">@{user?.username}</p>
-                                    </div>
-                                    <button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-4 py-1.5 rounded-[3px] text-white font-medium text-sm hover:bg-[#4752c4] mt-4">Редактировать профиль</button>
-                                </div>
-                            </div>
-
-                            <div className="bg-[#1E1F22] rounded-lg p-4 space-y-6">
-                                <div>
-                                    <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Email</label>
-                                    <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Новый пароль</label>
-                                        <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Текущий пароль</label>
-                                        <input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="mt-6 flex justify-end">
-                                <button onClick={saveAccount} className="bg-[#23A559] px-6 py-2 rounded-[3px] font-medium text-white hover:bg-[#1A8044] transition-all">Сохранить изменения</button>
-                            </div>
-                        </>
-                    )}
-
-                    {activeTab === 'profile' && (
-                        <>
-                            <h2 className="text-xl font-bold text-white mb-6">Профиль</h2>
-                            <div className="bg-[#1E1F22] rounded-lg overflow-hidden mb-8">
-                                <div style={{ backgroundColor: banner }} className="h-32 w-full relative group">
-                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Edit2 size={16} className="text-white"/></div></div>
-                                </div>
-                                <div className="px-4 pb-4 flex justify-between items-end -mt-10">
-                                    <div className="flex items-end gap-4">
-                                        <div className="relative group">
-                                            <img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" />
-                                            <label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><span className="text-[10px] font-bold text-white uppercase">Change</span><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="p-4 pt-0 grid grid-cols-2 gap-6">
-                                    <div>
-                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Отображаемое имя</label>
-                                        <input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">О себе</label>
-                                        <textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none h-[42px] resize-none" />
-                                    </div>
-                                </div>
-                            </div>
-                            <h2 className="text-xl font-bold text-white mb-4">Голос и видео</h2>
-                            <div className="bg-[#1E1F22] p-4 rounded-lg mb-8">
-                                <div className="flex items-center justify-between">
-                                    <div><h4 className="font-medium text-white">Шумоподавление</h4><p className="text-xs text-[#B5BAC1]">Убирает фоновый шум из вашего микрофона.</p></div>
-                                    <div onClick={()=>setNoise(!noise)} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-[#23A559]' : 'bg-[#80848E]'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-4' : 'translate-x-0'}`}/></div>
-                                </div>
-                            </div>
-                            <div className="flex justify-end gap-4">
-                                <button onClick={onClose} className="text-white hover:underline text-sm font-medium">Отмена</button>
-                                <button onClick={saveProfile} className="bg-[#5865F2] px-6 py-2 rounded-[3px] font-medium text-white hover:bg-[#4752c4] transition-all">Сохранить</button>
-                            </div>
-                        </>
-                    )}
-                 </div>
-             </motion.div>
-        </div>
-    );
+    const saveProfile = async () => { const fd = new FormData(); fd.append('userId', user._id); fd.append('displayName', displayName); fd.append('bio', bio); fd.append('bannerColor', banner); if(file) fd.append('avatar', file); try { const res = await axios.post(`${SERVER_URL}/api/update-profile`, fd); setUser(res.data); localStorage.setItem('user', JSON.stringify(res.data)); localStorage.setItem('noiseSuppression', noise); onClose(); } catch(e) { alert("Ошибка"); } };
+    const saveAccount = async () => { try { await axios.post(`${SERVER_URL}/api/update-account`, { userId: user._id, email, newPassword: newPass, currentPassword: currPass }); alert("Аккаунт обновлен!"); onClose(); } catch(e) { alert(e.response?.data?.error || "Ошибка"); } };
+    return (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8"><motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[30px] flex overflow-hidden shadow-2xl border border-white/5"><div className="w-64 bg-[#2B2D31] p-6 pt-10"><p className="uppercase text-[10px] font-black text-gray-400 px-2 mb-2 tracking-widest">Настройки пользователя</p><div onClick={()=>setActiveTab('account')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Моя учетная запись</div><div onClick={()=>setActiveTab('profile')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Профиль</div><div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div></div><div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]"><div onClick={onClose} className="absolute top-6 right-6 p-2 border-2 border-gray-500 rounded-full text-gray-500 hover:text-white hover:border-white cursor-pointer transition-all opacity-70 hover:opacity-100"><X size={20}/></div>{activeTab === 'account' && (<><h2 className="text-xl font-black text-white mb-6">Моя учетная запись</h2><div className="bg-[#1E1F22] rounded-2xl p-6 mb-8 flex items-center gap-6 border border-white/5"><div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111]" alt="av"/><div className="absolute -bottom-1 -right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div><div><h3 className="text-2xl font-black text-white">{user?.displayName}</h3><p className="text-sm font-bold text-gray-400">@{user?.username}</p></div><button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-6 py-2 rounded-xl text-white font-bold text-sm hover:bg-[#4752c4]">Редактировать профиль</button></div><div className="bg-[#1E1F22] rounded-2xl p-6 border border-white/5 space-y-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Email</label><input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Новый пароль</label><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Текущий пароль (для подтверждения)</label><input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div></div></div><div className="mt-6 flex justify-end"><button onClick={saveAccount} className="bg-green-600 px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-green-500 transition-all">Сохранить изменения</button></div></>)}{activeTab === 'profile' && (<><h2 className="text-xl font-black text-white mb-6">Профиль</h2><div className="bg-[#1E1F22] rounded-2xl overflow-hidden mb-8 border border-white/5"><div style={{ backgroundColor: banner }} className="h-32 w-full relative group"><div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Settings size={16} className="text-white"/></div></div></div><div className="px-6 pb-6 flex justify-between items-end -mt-10"><div className="flex items-end gap-4"><div className="relative group"><img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" /><label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><Camera size={24} className="text-white"/><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label></div></div></div><div className="p-6 pt-0 grid grid-cols-2 gap-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Отображаемое имя</label><input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">О себе</label><textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none h-[46px] resize-none" /></div></div></div><h2 className="text-xl font-black text-white mb-4">Голос и видео</h2><div className="bg-[#1E1F22] p-6 rounded-2xl mb-8 border border-white/5"><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div></div><div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div></>)}</div></motion.div></div>);
 }
 
-// --- AUTH COMPONENTS ---
 function Auth({ onAuth }) {
   const [isLogin, setIsLogin] = useState(true);
-  
   const [loginData, setLoginData] = useState({ login: '', password: '' });
   const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
   const [usernameStatus, setUsernameStatus] = useState(null); 
   const [error, setError] = useState("");
 
-  useEffect(() => {
-      if(isLogin || !regData.username) return;
-      const timeout = setTimeout(async () => {
-          try {
-             const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username });
-             setUsernameStatus(res.data.available ? 'free' : 'taken');
-          } catch(e) {}
-      }, 500);
-      return () => clearTimeout(timeout);
-  }, [regData.username, isLogin]);
-
-  const handleLogin = async () => {
-      try { const res = await axios.post(`${SERVER_URL}/api/login`, loginData); onAuth(res.data); } 
-      catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); }
-  };
-
-  const handleRegister = async () => {
-      try {
-          if(usernameStatus !== 'free') return setError("Имя пользователя занято");
-          if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения");
-          const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } });
-          onAuth(res.data);
-      } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); }
-  };
+  useEffect(() => { if(isLogin || !regData.username) return; const timeout = setTimeout(async () => { try { const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username }); setUsernameStatus(res.data.available ? 'free' : 'taken'); } catch(e) {} }, 500); return () => clearTimeout(timeout); }, [regData.username, isLogin]);
+  const handleLogin = async () => { try { const res = await axios.post(`${SERVER_URL}/api/login`, loginData); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); } };
+  const handleRegister = async () => { try { if(usernameStatus !== 'free') return setError("Имя пользователя занято"); if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения"); const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } }); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); } };
 
   return (
     <div className="h-screen flex items-center justify-center relative bg-[#0B0B0C] overflow-hidden">
       <BackgroundEffect />
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-[5px] shadow-2xl w-full max-w-[480px] z-10 relative">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-3xl shadow-2xl w-full max-w-[480px] z-10 relative border border-white/5">
         {isLogin ? (
             <>
-                <h2 className="text-2xl font-bold text-white text-center mb-2">С возвращением!</h2>
-                <p className="text-[#B5BAC1] text-center text-[15px] mb-6">Мы так рады видеть вас снова!</p>
+                <h2 className="text-2xl font-black text-white text-center mb-2">С возвращением!</h2>
+                <p className="text-gray-400 text-center text-xs mb-8 font-bold">Мы так рады видеть вас снова!</p>
                 <Input label="Адрес электронной почты или имя пользователя" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})}/>
                 <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
-                <div className="text-[#00A8FC] text-xs font-medium cursor-pointer mb-6 hover:underline">Забыли пароль?</div>
-                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all mb-2 text-sm">Вход</button>
-                <div className="text-xs text-[#949BA4] mt-2">Нужна учетная запись? <span onClick={()=>{setIsLogin(false); setError("")}} className="text-[#00A8FC] cursor-pointer hover:underline ml-1">Зарегистрироваться</span></div>
+                <div className="text-[#00A8FC] text-xs font-bold cursor-pointer mt-2 hover:underline">Забыли пароль?</div>
+                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-3 rounded-xl transition-all mb-4 mt-6 shadow-lg shadow-indigo-500/20">Вход</button>
+                <div className="text-xs text-gray-400 mt-2 font-medium">Нужна учетная запись? <span onClick={()=>setIsLogin(false)} className="text-[#00A8FC] cursor-pointer hover:underline font-bold">Зарегистрироваться</span></div>
             </>
         ) : (
             <div className="max-h-[85vh] overflow-y-auto no-scrollbar pr-1">
-                <h2 className="text-2xl font-bold text-white text-center mb-6">Создать учетную запись</h2>
+                <h2 className="text-2xl font-black text-white text-center mb-6">Создать учетную запись</h2>
                 <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
                 <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
                 <div className="mb-4">
-                    <label className={`block text-[11px] font-bold uppercase mb-1.5 ${usernameStatus==='taken'?'text-red-400':'text-[#B5BAC1]'}`}>Имя пользователя <span className="text-red-400">*</span></label>
-                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium" />
-                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-medium">Супер! Это имя свободно.</p>}
-                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-medium">Имя занято.</p>}
+                    <label className={`block text-[11px] font-black uppercase mb-2 ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>Имя пользователя <span className="text-red-400">*</span></label>
+                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none text-sm transition-all font-medium" />
+                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-bold">Супер! Это имя свободно.</p>}
+                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-bold">Имя занято.</p>}
                 </div>
                 <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
                 <div className="mb-6">
-                    <label className="block text-[11px] font-bold uppercase text-[#B5BAC1] mb-1.5">Дата рождения <span className="text-red-400">*</span></label>
+                    <label className="block text-[11px] font-black uppercase text-gray-400 mb-2">Дата рождения <span className="text-red-400">*</span></label>
                     <div className="flex gap-3">
                         <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
                         <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
                         <div className="w-[30%]"><CustomSelect placeholder="Год" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
                     </div>
                 </div>
-                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all text-sm">Продолжить</button>
-                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-medium text-left" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
+                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-3 rounded-xl transition-all mt-6 shadow-lg shadow-indigo-500/20">Продолжить</button>
+                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-bold text-center" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
             </div>
         )}
-        {error && <div className="mt-4 bg-[#F23F43] text-white p-2 rounded text-xs font-medium text-center">{error}</div>}
+        {error && <div className="mt-4 bg-red-500/10 border border-red-500 text-white p-3 rounded-xl text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
       </motion.div>
     </div>
   );
