@@ -1,6 +1,6 @@
 {
   "name": "talkspace",
-  "version": "1.0.4",
+  "version": "1.0.3",
   "private": false,
   "main": "electron.js",
   "homepage": "./",
@@ -42,7 +42,7 @@
     "extends": null,
     "appId": "com.talkspace.app",
     "productName": "TalkSpace",
-    "appMetadata": {
+    "extraMetadata": {
       "homepage": "https://github.com/talkspacegraphi/talkspaceclient"
     },
     "files": [
