@@ -12,8 +12,8 @@ import {
   Monitor, Send, Phone, PhoneOff, Video, VideoOff, Plus, 
   Menu, Camera, Smile, Reply, Hash, LogOut, Minus, Square, 
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
-  AlertCircle, ChevronDown, Paperclip, Edit2, Volume2, Search, Crown, 
-  UserMinus, DownloadCloud, Bell
+  AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
+  DownloadCloud
 } from 'lucide-react';
 
 // --- IPC СВЯЗЬ С ELECTRON ---
@@ -40,9 +40,65 @@ const LOADING_FACTS = [
     "TalkSpace поддерживает демонстрацию экрана в HD."
 ];
 
-// --- КОМПОНЕНТЫ ---
+// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ UI (ВЫНЕСЕНЫ НАРУЖУ) ---
 
-// 1. ЗАГОЛОВОК ОКНА
+// 1. Поле ввода (Исправлен баг с фокусом)
+const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
+    <div className="mb-4">
+        <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-[#B5BAC1]'}`}>
+            {label} {required && <span className="text-red-400">*</span>} 
+            {errorMsg && <span className="italic normal-case ml-1 font-medium">- {errorMsg}</span>}
+        </label>
+        <input 
+            type={type} 
+            value={value} 
+            onChange={onChange} 
+            className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all focus:bg-[#1E1F22] focus:ring-0 font-medium" 
+        />
+    </div>
+);
+
+// 2. Кастомный Селект (Для даты рождения)
+const CustomSelect = ({ options, value, onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative w-full" ref={ref}>
+            <div 
+                onClick={() => setIsOpen(!isOpen)} 
+                className={`w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white text-sm h-10 flex items-center justify-between cursor-pointer border border-transparent hover:border-[#0B0B0C] transition-colors ${isOpen ? 'rounded-b-none' : ''}`}
+            >
+                <span className={`${!value ? 'text-[#949BA4]' : 'text-white'}`}>{value || placeholder}</span>
+                {isOpen ? <ChevronUp size={16} className="text-[#949BA4]"/> : <ChevronDown size={16} className="text-[#949BA4]"/>}
+            </div>
+            {isOpen && (
+                <div className="absolute top-full left-0 right-0 bg-[#2B2D31] border border-[#1E1F22] border-t-0 max-h-48 overflow-y-auto z-50 rounded-b-[3px] shadow-xl custom-scrollbar">
+                    {options.map((opt, i) => (
+                        <div 
+                            key={i} 
+                            onClick={() => { onChange(opt); setIsOpen(false); }}
+                            className="p-2 text-sm text-[#DBDEE1] hover:bg-[#404249] hover:text-white cursor-pointer transition-colors"
+                        >
+                            {opt}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- ОСНОВНЫЕ КОМПОНЕНТЫ ---
+
 function TitleBar() {
   if (!ipcRenderer) return null;
   return (
@@ -61,7 +117,6 @@ function TitleBar() {
   );
 }
 
-// 2. ЭКРАН ЗАГРУЗКИ
 function LoadingScreen() {
     const [fact] = useState(LOADING_FACTS[Math.floor(Math.random() * LOADING_FACTS.length)]);
     return (
@@ -79,7 +134,6 @@ function LoadingScreen() {
     )
 }
 
-// 3. БАННЕР ОБНОВЛЕНИЯ
 function UpdateBanner() {
     const [show, setShow] = useState(false);
     useEffect(() => {
@@ -97,12 +151,14 @@ function UpdateBanner() {
     );
 }
 
-// 4. ФОНОВЫЙ ЭФФЕКТ
 function BackgroundEffect() {
     return (
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#0B0B0C]">
-          <motion.div animate={{ x: [0, 100, 0], y: [0, -50, 0], opacity: [0.2, 0.4, 0.2] }} transition={{ duration: 15, repeat: Infinity }} className="absolute top-0 left-0 w-[60vw] h-[60vw] bg-purple-900/10 rounded-full blur-[150px]" />
-          <motion.div animate={{ x: [0, -100, 0], y: [0, 50, 0], opacity: [0.2, 0.4, 0.2] }} transition={{ duration: 18, repeat: Infinity }} className="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-blue-900/10 rounded-full blur-[150px]" />
+          {/* Статичный фон паттерн (как в дискорде) */}
+          <div className="absolute inset-0 bg-[url('https://discord.com/assets/843b08e5830058e3789a24d9c79e6079.svg')] bg-cover opacity-5"></div>
+          {/* Анимированные пятна */}
+          <motion.div animate={{ x: [0, 100, 0], y: [0, -50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 15, repeat: Infinity }} className="absolute top-0 left-0 w-[60vw] h-[60vw] bg-purple-900 rounded-full blur-[150px]" />
+          <motion.div animate={{ x: [0, -100, 0], y: [0, 50, 0], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 18, repeat: Infinity }} className="absolute bottom-0 right-0 w-[70vw] h-[70vw] bg-blue-900 rounded-full blur-[150px]" />
       </div>
     );
 }
@@ -157,6 +213,96 @@ export default function App() {
   );
 }
 
+// --- АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ---
+function Auth({ onAuth }) {
+  const [isLogin, setIsLogin] = useState(true);
+  
+  const [loginData, setLoginData] = useState({ login: '', password: '' });
+  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
+  const [usernameStatus, setUsernameStatus] = useState(null); 
+  const [error, setError] = useState("");
+
+  // Проверка имени пользователя
+  useEffect(() => {
+      if(isLogin || !regData.username) return;
+      const timeout = setTimeout(async () => {
+          try {
+             const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username });
+             setUsernameStatus(res.data.available ? 'free' : 'taken');
+          } catch(e) {}
+      }, 500);
+      return () => clearTimeout(timeout);
+  }, [regData.username, isLogin]);
+
+  const handleLogin = async () => {
+      try {
+          const res = await axios.post(`${SERVER_URL}/api/login`, loginData);
+          onAuth(res.data);
+      } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); }
+  };
+
+  const handleRegister = async () => {
+      try {
+          if(usernameStatus !== 'free') return setError("Имя пользователя занято");
+          if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения");
+          
+          const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } });
+          onAuth(res.data);
+      } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); }
+  };
+
+  return (
+    <div className="h-screen flex items-center justify-center relative bg-[#0B0B0C] overflow-hidden">
+      <BackgroundEffect />
+      
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-[5px] shadow-2xl w-full max-w-[480px] z-10 relative">
+        {isLogin ? (
+            <>
+                <h2 className="text-2xl font-bold text-white text-center mb-2">С возвращением!</h2>
+                <p className="text-[#B5BAC1] text-center text-[15px] mb-6">Мы так рады видеть вас снова!</p>
+                
+                <Input label="Адрес электронной почты или имя пользователя" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})}/>
+                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
+                
+                <div className="text-[#00A8FC] text-xs font-medium cursor-pointer mb-6 hover:underline">Забыли пароль?</div>
+                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all mb-2 text-sm">Вход</button>
+                <div className="text-xs text-[#949BA4] mt-2">Нужна учетная запись? <span onClick={()=>{setIsLogin(false); setError("")}} className="text-[#00A8FC] cursor-pointer hover:underline ml-1">Зарегистрироваться</span></div>
+            </>
+        ) : (
+            <div className="max-h-[85vh] overflow-y-auto no-scrollbar pr-1">
+                <h2 className="text-2xl font-bold text-white text-center mb-6">Создать учетную запись</h2>
+                
+                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
+                <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
+                
+                <div className="mb-4">
+                    <label className={`block text-[11px] font-bold uppercase mb-1.5 ${usernameStatus==='taken'?'text-red-400':'text-[#B5BAC1]'}`}>Имя пользователя <span className="text-red-400">*</span></label>
+                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium" />
+                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-medium">Супер! Это имя свободно.</p>}
+                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-medium">Имя занято.</p>}
+                </div>
+
+                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
+                
+                <div className="mb-6">
+                    <label className="block text-[11px] font-bold uppercase text-[#B5BAC1] mb-1.5">Дата рождения <span className="text-red-400">*</span></label>
+                    <div className="flex gap-3">
+                        <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
+                        <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
+                        <div className="w-[30%]"><CustomSelect placeholder="Год" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
+                    </div>
+                </div>
+
+                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all text-sm">Продолжить</button>
+                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-medium text-left" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
+            </div>
+        )}
+        {error && <div className="mt-4 bg-[#F23F43] text-white p-2 rounded text-xs font-medium text-center">{error}</div>}
+      </motion.div>
+    </div>
+  );
+}
+
 // --- ОСНОВНОЙ ЛЕЙАУТ ---
 function MainLayout({ user, setUser, onLogout }) {
   const navigate = useNavigate();
@@ -194,10 +340,9 @@ function MainLayout({ user, setUser, onLogout }) {
 
   const StatusDot = ({ status, size = "w-3 h-3" }) => {
     const color = status === 'online' ? 'bg-green-500' : status === 'dnd' ? 'bg-red-500' : 'bg-yellow-500';
-    return <div className={`${size} rounded-full ${color} border-[2px] border-[#0B0B0C] absolute -bottom-0.5 -right-0.5`} />;
+    return <div className={`${size} rounded-full ${color} border-[3px] border-[#232428] absolute -bottom-0.5 -right-0.5`} />;
   };
 
-  // Context Menu
   const handleContextMenu = (e, s) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, serverId: s._id, ownerId: s.owner, name: s.name }); };
   const deleteServer = async () => { if(window.confirm(`Удалить ${contextMenu.name}?`)) { await axios.post(`${SERVER_URL}/api/delete-server`, { serverId: contextMenu.serverId }); refresh(); setContextMenu(null); navigate('/friends'); }};
   const leaveServer = async () => { if(window.confirm(`Выйти из ${contextMenu.name}?`)) { await axios.post(`${SERVER_URL}/api/leave-server`, { serverId: contextMenu.serverId, userId: user._id }); refresh(); setContextMenu(null); navigate('/friends'); }};
@@ -206,22 +351,22 @@ function MainLayout({ user, setUser, onLogout }) {
   return (
     <div className="relative flex h-full z-10 overflow-hidden" onClick={()=>setContextMenu(null)}>
       {/* 1. SERVER LIST */}
-      <div className="w-[72px] flex flex-col items-center py-3 gap-3 bg-[#0B0B0C] border-r border-white/5 shrink-0 z-20 overflow-y-auto no-scrollbar">
-        <div onClick={() => navigate('/friends')} className="relative w-12 h-12 bg-[#313338] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 group shadow-md">
-          <MessageSquare size={24} className="text-gray-300 group-hover:text-white" />
-          {user?.requests?.length > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-2 border-[#0B0B0C] text-[10px] font-bold text-white shadow-lg">{user.requests.length}</div>}
+      <div className="w-[72px] flex flex-col items-center py-3 gap-3 bg-[#1E1F22] border-r border-black/10 shrink-0 z-20 overflow-y-auto no-scrollbar">
+        <div onClick={() => navigate('/friends')} className="relative w-12 h-12 bg-[#313338] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 group shadow-md text-gray-200">
+          <MessageSquare size={24} className="group-hover:text-white" />
+          {user?.requests?.length > 0 && <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-[3px] border-[#1E1F22] text-[10px] font-bold text-white shadow-lg">{user.requests.length}</div>}
         </div>
-        <div className="w-8 h-[2px] bg-white/10 rounded-full" />
+        <div className="w-8 h-[2px] bg-[#35363C] rounded-full" />
         {user?.servers?.map(s => (
-            <div key={s._id} onClick={() => navigate(`/server/${s._id}`)} onContextMenu={(e) => handleContextMenu(e, s)} className="w-12 h-12 bg-[#313338] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 text-white font-bold uppercase shadow-md relative select-none text-xs overflow-hidden border border-white/5">
+            <div key={s._id} onClick={() => navigate(`/server/${s._id}`)} onContextMenu={(e) => handleContextMenu(e, s)} className="w-12 h-12 bg-[#313338] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 text-white font-bold uppercase shadow-md relative select-none text-xs overflow-hidden border-none group">
                 {s.name.substring(0, 2)}
             </div>
         ))}
-        <button onClick={() => setCreateServerModal(true)} className="w-12 h-12 bg-[#313338] text-green-500 hover:bg-green-500 hover:text-white rounded-[24px] hover:rounded-[16px] transition-all flex items-center justify-center shadow-md group border border-white/5"><Plus size={24} /></button>
+        <button onClick={() => setCreateServerModal(true)} className="w-12 h-12 bg-[#313338] text-green-500 hover:bg-green-500 hover:text-white rounded-[24px] hover:rounded-[16px] transition-all flex items-center justify-center shadow-md group"><Plus size={24} /></button>
       </div>
 
       {/* 2. SIDEBAR */}
-      <div className="w-64 bg-[#111214] flex flex-col shrink-0 z-20 border-r border-white/5">
+      <div className="w-60 bg-[#2B2D31] flex flex-col shrink-0 z-20">
          <Routes>
              <Route path="/friends" element={<DMSidebar user={user} navigate={navigate} StatusDot={StatusDot} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
              <Route path="/chat/*" element={<DMSidebar user={user} navigate={navigate} StatusDot={StatusDot} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
@@ -230,7 +375,7 @@ function MainLayout({ user, setUser, onLogout }) {
       </div>
 
       {/* 3. MAIN CONTENT */}
-      <div className="flex-1 flex flex-col bg-[#1E1F22] relative min-w-0 z-10">
+      <div className="flex-1 flex flex-col bg-[#313338] relative min-w-0 z-10">
         <Routes>
           <Route path="/friends" element={<FriendsView user={user} refresh={refresh} />} />
           <Route path="/chat/:friendId" element={<ChatView user={user} noiseSuppression={noiseSuppression} />} />
@@ -240,13 +385,13 @@ function MainLayout({ user, setUser, onLogout }) {
       </div>
 
       {contextMenu && (
-          <div style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed bg-[#111] border border-white/10 rounded-xl shadow-2xl z-[300] py-1 w-48 font-bold">
-              <button onClick={inviteServer} className="w-full text-left px-3 py-2 text-indigo-400 hover:bg-[var(--primary)] hover:text-white text-xs flex items-center gap-2 transition-colors"><LinkIcon size={14}/> Пригласить</button>
+          <div style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed bg-[#111] border border-white/10 rounded-[4px] shadow-2xl z-[300] py-1 w-48 font-medium">
+              <button onClick={inviteServer} className="w-full text-left px-2 py-1.5 text-[#B5BAC1] hover:bg-[#5865F2] hover:text-white text-xs flex items-center gap-2 transition-colors"><LinkIcon size={14}/> Пригласить</button>
               <div className="h-[1px] bg-white/10 my-1"/>
               {contextMenu.ownerId === user._id ? (
-                  <button onClick={deleteServer} className="w-full text-left px-3 py-2 text-red-500 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><Trash size={14}/> Удалить</button>
+                  <button onClick={deleteServer} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><Trash size={14}/> Удалить</button>
               ) : (
-                  <button onClick={leaveServer} className="w-full text-left px-3 py-2 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><LeaveIcon size={14}/> Покинуть</button>
+                  <button onClick={leaveServer} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><LeaveIcon size={14}/> Покинуть</button>
               )}
           </div>
       )}
@@ -259,22 +404,21 @@ function MainLayout({ user, setUser, onLogout }) {
   );
 }
 
-// --- SIDEBARS ---
 const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
     <>
-        <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm select-none uppercase tracking-widest text-[10px] text-gray-500">Личные сообщения</div>
-        <div className="flex-1 p-2 space-y-1 overflow-y-auto">
-          <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${window.location.hash.includes('/friends') ? 'bg-[#3F4147] text-white' : 'text-gray-400 hover:bg-[#1E1F22]'}`}>
-            <Users size={20} /> <span className="text-sm font-bold">Друзья</span>
+        <div className="h-12 flex items-center px-4 font-bold text-white border-b border-[#1F2023] shadow-sm select-none bg-[#2B2D31] text-sm">Поиск...</div>
+        <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+          <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-all ${window.location.hash.includes('/friends') ? 'bg-[#404249] text-white' : 'text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>
+            <Users size={20} /> <span className="text-[15px] font-medium">Друзья</span>
           </button>
-          <div className="mt-4 mb-2 px-3 text-[10px] font-black text-gray-500 uppercase tracking-widest flex items-center justify-between select-none"><span>ЛС</span> <Plus size={12} className="cursor-pointer hover:text-white"/></div>
+          <div className="mt-4 mb-1 px-3 text-[11px] font-bold text-[#949BA4] uppercase tracking-wide flex items-center justify-between select-none hover:text-[#DBDEE1]"><span>Личные сообщения</span> <Plus size={14} className="cursor-pointer"/></div>
           {user?.chats?.map(c => {
             const f = c.members.find(m => m._id !== user._id);
             if (!f) return null;
             return (
-              <div key={c._id} onClick={() => navigate(`/chat/${f._id}`)} className={`flex items-center gap-3 px-2 py-2 rounded-xl cursor-pointer transition-all group ${window.location.hash.includes(f._id) ? 'bg-[#3F4147] text-white shadow-md' : 'hover:bg-[#1E1F22] text-gray-400'}`}>
-                <div className="relative"><img src={f.avatar} className="w-9 h-9 rounded-full bg-zinc-800 object-cover" alt="av" /><StatusDot status={f.status} /></div>
-                <div className="flex-1 overflow-hidden leading-tight"><p className="truncate text-sm font-bold group-hover:text-white transition-colors">{f.displayName || f.username}</p><p className="text-[10px] text-gray-500 truncate group-hover:text-gray-400">{f.status}</p></div>
+              <div key={c._id} onClick={() => navigate(`/chat/${f._id}`)} className={`flex items-center gap-3 px-2 py-2 rounded-[4px] cursor-pointer transition-all group ${window.location.hash.includes(f._id) ? 'bg-[#404249] text-white' : 'hover:bg-[#35373C] text-[#949BA4]'}`}>
+                <div className="relative"><img src={f.avatar} className="w-8 h-8 rounded-full bg-zinc-800 object-cover" alt="av" /><StatusDot status={f.status} /></div>
+                <div className="flex-1 overflow-hidden leading-tight"><p className="truncate text-[15px] font-medium group-hover:text-[#DBDEE1] transition-colors">{f.displayName || f.username}</p><p className="text-[12px] opacity-70 truncate">{f.status}</p></div>
               </div>
             );
           })}
@@ -288,12 +432,12 @@ const ServerSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu,
     const activeServer = user?.servers?.find(s => s._id === serverId);
     return (
     <>
-        <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm truncate select-none uppercase tracking-wide text-xs">{activeServer?.name || "Server"}</div>
-        <div className="flex-1 p-2 space-y-1 overflow-y-auto">
+        <div className="h-12 flex items-center px-4 font-bold text-white border-b border-[#1F2023] shadow-sm truncate select-none text-[15px]">{activeServer?.name || "Server"}</div>
+        <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
             {activeServer?.channels?.map(ch => (
-                <div key={ch._id} onClick={() => navigate(`/server/${serverId}?channel=${ch._id}`)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${window.location.search.includes(ch._id) ? 'bg-[#3F4147] text-white' : 'text-gray-400 hover:bg-[#1E1F22]'}`}>
+                <div key={ch._id} onClick={() => navigate(`/server/${serverId}?channel=${ch._id}`)} className={`flex items-center gap-1.5 px-2 py-1.5 rounded-[4px] cursor-pointer transition-colors ${window.location.search.includes(ch._id) ? 'bg-[#404249] text-white' : 'text-[#949BA4] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>
                     {ch.type === 'voice' ? <Volume2 size={18}/> : <Hash size={18}/>}
-                    <span className="font-bold text-sm">{ch.name}</span>
+                    <span className="font-medium text-[15px]">{ch.name}</span>
                 </div>
             ))}
         </div>
@@ -303,22 +447,22 @@ const ServerSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu,
 };
 
 const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateStatus, StatusDot }) => (
-    <div className="bg-[#0B0B0C] border-t border-white/5 p-2 relative select-none flex items-center gap-2">
+    <div className="bg-[#232428] p-1.5 relative select-none flex items-center gap-1">
        <AnimatePresence>
         {statusMenu && (
-          <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: -10, opacity: 1 }} exit={{ opacity: 0 }} className="absolute bottom-full left-2 w-56 bg-[#111] border border-white/10 rounded-2xl p-2 shadow-2xl z-50 mb-2">
-             <button onClick={() => updateStatus('online')} className="w-full text-left p-2 hover:bg-white/10 rounded-xl flex items-center gap-3 text-xs font-bold text-gray-300 hover:text-white"><div className="w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_8px_green]"/> В сети</button>
-             <button onClick={() => updateStatus('dnd')} className="w-full text-left p-2 hover:bg-white/10 rounded-xl flex items-center gap-3 text-xs font-bold text-gray-300 hover:text-white"><div className="w-2.5 h-2.5 bg-red-500 rounded-full shadow-[0_0_8px_red]"/> Не беспокоить</button>
-             <button onClick={() => updateStatus('idle', 'Спит')} className="w-full text-left p-2 hover:bg-white/10 rounded-xl flex items-center gap-3 text-xs font-bold text-gray-300 hover:text-white"><div className="w-2.5 h-2.5 bg-yellow-500 rounded-full shadow-[0_0_8px_yellow]"/> Спит</button>
+          <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: -10, opacity: 1 }} exit={{ opacity: 0 }} className="absolute bottom-full left-2 w-56 bg-[#111] border border-white/10 rounded-lg p-2 shadow-2xl z-50 mb-2">
+             <button onClick={() => updateStatus('online')} className="w-full text-left p-2 hover:bg-white/10 rounded flex items-center gap-3 text-sm font-medium text-gray-300 hover:text-white"><div className="w-2.5 h-2.5 bg-green-500 rounded-full"/> В сети</button>
+             <button onClick={() => updateStatus('dnd')} className="w-full text-left p-2 hover:bg-white/10 rounded flex items-center gap-3 text-sm font-medium text-gray-300 hover:text-white"><div className="w-2.5 h-2.5 bg-red-500 rounded-full"/> Не беспокоить</button>
+             <button onClick={() => updateStatus('idle', 'Спит')} className="w-full text-left p-2 hover:bg-white/10 rounded flex items-center gap-3 text-sm font-medium text-gray-300 hover:text-white"><div className="w-2.5 h-2.5 bg-yellow-500 rounded-full"/> Спит</button>
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white/5 cursor-pointer transition-colors flex-1" onClick={(e) => {if(!e.target.closest('.icons')) setStatusMenu(!statusMenu)}}>
-          <div className="relative"><img src={user?.avatar} className="w-9 h-9 rounded-full object-cover bg-zinc-800" alt="me" /><StatusDot status={user.status} /></div>
-          <div className="flex-1 overflow-hidden leading-tight"><p className="text-xs font-black text-white truncate">{user?.displayName}</p><p className="text-[9px] text-gray-400 font-bold">@{user?.username}</p></div>
+      <div className="flex items-center gap-2 p-1 rounded hover:bg-[#3F4147] cursor-pointer transition-colors flex-1" onClick={(e) => {if(!e.target.closest('.icons')) setStatusMenu(!statusMenu)}}>
+          <div className="relative"><img src={user?.avatar} className="w-8 h-8 rounded-full object-cover bg-zinc-800" alt="me" /><StatusDot status={user.status} /></div>
+          <div className="flex-1 overflow-hidden leading-tight"><p className="text-xs font-bold text-white truncate">{user?.displayName}</p><p className="text-[11px] text-[#DBDEE1]">@{user?.username}</p></div>
       </div>
       <div className="flex gap-0 icons">
-        <button className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors" onClick={()=>setShowSettings(true)}><Settings size={18}/></button>
+        <button className="p-2 hover:bg-[#3F4147] rounded text-gray-200" onClick={()=>setShowSettings(true)}><Settings size={18}/></button>
       </div>
     </div>
 );
@@ -328,7 +472,6 @@ function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localS
     if (!callActive && !incoming) return null;
     const [fullScreen, setFullScreen] = useState(false);
 
-    // Анимация когда нет видео
     const PulseAvatar = ({ src }) => (
         <div className="relative flex items-center justify-center w-full h-full">
             <span className="absolute inline-flex h-32 w-32 rounded-full bg-green-500 opacity-20 animate-ping"></span>
@@ -340,37 +483,32 @@ function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localS
         <div className={`bg-black border-b border-white/5 shrink-0 relative flex flex-col transition-all duration-300 ${fullScreen ? 'fixed inset-0 z-[100] h-screen border-none p-6' : 'p-3'}`}>
             {fullScreen && <div className="absolute top-4 right-4 z-50"><button onClick={()=>setFullScreen(false)} className="bg-black/50 p-2 rounded-xl hover:bg-black/80 text-white"><Minimize size={20}/></button></div>}
 
-            {/* Входящий звонок */}
             {incoming && !callActive && (
-                 <motion.div initial={{y:-20, opacity:0}} animate={{y:0, opacity:1}} className="w-full flex items-center justify-between bg-[#111] p-4 rounded-2xl border border-indigo-500/50 shadow-[0_0_30px_rgba(88,101,242,0.3)]">
-                     <div className="flex items-center gap-4">
-                         <img src="https://via.placeholder.com/50" className="w-12 h-12 rounded-full border-2 border-[#5865F2] animate-pulse" alt="av"/>
-                         <div><p className="text-[10px] text-[#5865F2] font-black uppercase tracking-widest mb-1">Входящий звонок</p><p className="text-white font-bold text-lg">{incoming.from}</p></div>
+                 <motion.div initial={{y:-20, opacity:0}} animate={{y:0, opacity:1}} className="w-full flex items-center justify-between bg-[#111] p-3 rounded-lg border border-green-600 shadow-xl">
+                     <div className="flex items-center gap-3">
+                         <img src="https://via.placeholder.com/50" className="w-10 h-10 rounded-full animate-bounce" alt="av"/>
+                         <div><p className="text-[10px] text-green-500 font-bold uppercase">Входящий звонок</p><p className="text-white font-bold">{incoming.from}</p></div>
                      </div>
-                     <div className="flex gap-4">
-                         <button onClick={onAccept} className="p-3 bg-green-500 rounded-full text-white hover:bg-green-400 shadow-lg active:scale-95 transition-all"><Phone size={20}/></button>
-                         <button onClick={onReject} className="p-3 bg-red-500 rounded-full text-white hover:bg-red-400 shadow-lg active:scale-95 transition-all"><PhoneOff size={20}/></button>
+                     <div className="flex gap-3">
+                         <button onClick={onAccept} className="p-2 bg-green-500 rounded-full text-white hover:bg-green-400"><Phone size={20}/></button>
+                         <button onClick={onReject} className="p-2 bg-red-500 rounded-full text-white hover:bg-red-400"><PhoneOff size={20}/></button>
                      </div>
                  </motion.div>
             )}
 
-            {/* Активный звонок */}
             {callActive && (
                 <div className={`flex flex-col gap-3 ${fullScreen ? 'h-full' : ''}`}>
                     <div className={`flex gap-3 w-full ${fullScreen ? 'flex-1' : 'h-64'}`}>
-                        {/* Видео собеседника */}
-                        <div className="flex-1 bg-[#111] rounded-2xl overflow-hidden relative flex items-center justify-center group border border-white/5 shadow-inner">
+                        <div className="flex-1 bg-[#111] rounded-lg overflow-hidden relative flex items-center justify-center group border border-white/5 shadow-inner">
                             {remoteStream && remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled ? (
                                 <video ref={v => {if(v) v.srcObject = remoteStream}} autoPlay className="w-full h-full object-cover" />
                             ) : (
                                 <PulseAvatar src={friend?.avatar || 'https://via.placeholder.com/100'} />
                             )}
-                            <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-lg text-xs font-bold text-white backdrop-blur-sm">{friend?.displayName}</div>
-                            {!fullScreen && <button onClick={()=>setFullScreen(true)} className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-black/60 p-2 rounded-lg text-white transition-all hover:bg-black"><Maximize size={16}/></button>}
+                            <div className="absolute bottom-3 left-3 bg-black/60 px-2 py-0.5 rounded text-xs font-bold text-white">{friend?.displayName}</div>
+                            {!fullScreen && <button onClick={()=>setFullScreen(true)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-black/60 p-1 rounded text-white"><Maximize size={16}/></button>}
                         </div>
-                        
-                        {/* Мое видео (PiP) */}
-                        <div className="w-48 bg-[#111] rounded-2xl overflow-hidden relative shadow-2xl border border-white/10 group">
+                        <div className="w-48 bg-[#111] rounded-lg overflow-hidden relative shadow-2xl border border-white/10 group">
                              {isCamOn || isScreenOn ? (
                                 <video ref={v => {if(v) v.srcObject = localStream}} autoPlay muted className={`w-full h-full object-cover ${!isScreenOn ? 'mirror' : ''}`} />
                              ) : (
@@ -379,13 +517,11 @@ function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localS
                              <div className="absolute bottom-2 left-2 bg-black/60 px-2 py-0.5 rounded-md text-[10px] font-bold text-white">Вы</div>
                         </div>
                     </div>
-                    
-                    {/* Кнопки управления */}
                     <div className={`flex justify-center gap-4 ${fullScreen ? 'pb-8 pt-4' : ''}`}>
-                        <button onClick={toggleMic} className={`p-4 rounded-2xl transition-all ${isMicOn ? 'bg-[#2B2D31] hover:bg-white hover:text-black text-gray-200' : 'bg-red-500 text-white shadow-[0_0_15px_red]'}`}>{isMicOn ? <Mic size={22}/> : <MicOff size={22}/>}</button>
-                        <button onClick={toggleCam} className={`p-4 rounded-2xl transition-all ${isCamOn ? 'bg-[#2B2D31] hover:bg-white hover:text-black text-gray-200' : 'bg-red-500 text-white shadow-[0_0_15px_red]'}`}>{isCamOn ? <Video size={22}/> : <VideoOff size={22}/>}</button>
-                        <button onClick={shareScreen} className={`p-4 rounded-2xl transition-all ${isScreenOn ? 'bg-green-500 text-white shadow-[0_0_15px_green]' : 'bg-[#2B2D31] hover:bg-white hover:text-black text-gray-200'}`}><Monitor size={22}/></button>
-                        <button onClick={onHangup} className="p-4 px-8 bg-red-600 rounded-2xl text-white hover:bg-red-500 shadow-xl active:scale-95 transition-all"><PhoneOff size={26}/></button>
+                        <button onClick={toggleMic} className={`p-3 rounded-full transition-all ${isMicOn ? 'bg-white text-black' : 'bg-red-500 text-white'}`}>{isMicOn ? <Mic size={20}/> : <MicOff size={20}/>}</button>
+                        <button onClick={toggleCam} className={`p-3 rounded-full transition-all ${isCamOn ? 'bg-white text-black' : 'bg-white/10 text-white'}`}>{isCamOn ? <Video size={20}/> : <VideoOff size={20}/>}</button>
+                        <button onClick={shareScreen} className={`p-3 rounded-full transition-all ${isScreenOn ? 'bg-green-500 text-white' : 'bg-white/10 text-white'}`}><Monitor size={20}/></button>
+                        <button onClick={onHangup} className="p-3 px-6 bg-red-600 rounded-full text-white hover:bg-red-500 shadow-xl active:scale-95 transition-all"><PhoneOff size={24}/></button>
                     </div>
                 </div>
             )}
@@ -399,40 +535,40 @@ function MessageList({ messages, user, onReact, onEdit, onDelete }) {
     useEffect(() => { scrollRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
     return (
-        <div className="flex-1 p-6 overflow-y-auto space-y-6 flex flex-col">
+        <div className="flex-1 p-4 overflow-y-auto space-y-4 flex flex-col">
             {messages.map((m, i) => {
                 const isMe = m.senderId === user._id;
                 return (
                     <div key={i} className={`flex gap-4 group ${isMe ? 'flex-row-reverse' : ''} relative`}>
-                        <img src={m.senderAvatar} className="w-10 h-10 rounded-full shrink-0 bg-zinc-800 object-cover mt-1 border border-white/5" alt="m" />
+                        <img src={m.senderAvatar} className="w-10 h-10 rounded-full shrink-0 bg-zinc-800 object-cover mt-1" alt="m" />
                         <div className={`flex flex-col max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
                             <div className="flex items-baseline gap-2 mb-1">
-                                <span className="text-sm font-bold text-white">{m.senderName}</span>
-                                <span className="text-[10px] text-gray-400 font-medium">{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                                <span className="text-[15px] font-medium text-white">{m.senderName}</span>
+                                <span className="text-[11px] text-[#949BA4]">{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                             </div>
                             <div className="relative group/msg">
-                                <div className={`px-4 py-2.5 rounded-2xl shadow-sm text-[15px] leading-relaxed ${isMe ? 'bg-[var(--primary)] text-white rounded-tr-none' : 'bg-[#2B2D31] text-gray-100 rounded-tl-none'}`}>
+                                <div className={`px-4 py-2.5 rounded shadow-sm text-[15px] leading-relaxed text-[#DBDEE1] ${isMe ? 'bg-[#5865F2] text-white rounded-tr-none' : 'bg-[#2B2D31] rounded-tl-none'}`}>
                                     {m.type === 'image' ? (
-                                        <img src={m.fileUrl} className="max-w-full rounded-lg cursor-pointer" onClick={()=>window.open(m.fileUrl)} alt="att"/>
+                                        <img src={m.fileUrl} className="max-w-full rounded cursor-pointer" onClick={()=>window.open(m.fileUrl)} alt="att"/>
                                     ) : (
                                         <ReactMarkdown remarkPlugins={[remarkGfm]} className="markdown">{m.text}</ReactMarkdown>
                                     )}
-                                    {m.isEdited && <span className="text-[9px] opacity-50 ml-1">(изменено)</span>}
+                                    {m.isEdited && <span className="text-[10px] opacity-60 ml-1">(изм.)</span>}
                                 </div>
                                 {m.reactions?.length > 0 && (
                                     <div className="flex gap-1 mt-1 flex-wrap">
                                         {m.reactions.map((r, ri) => (
-                                            <div key={ri} onClick={()=>onReact(m._id, r.emoji)} className="bg-[#111] px-1.5 py-0.5 rounded text-[10px] border border-white/10 cursor-pointer hover:border-[var(--primary)] flex items-center gap-1">
+                                            <div key={ri} onClick={()=>onReact(m._id, r.emoji)} className="bg-[#2B2D31] px-1.5 py-0.5 rounded text-[11px] border border-transparent cursor-pointer hover:border-[#5865F2] flex items-center gap-1">
                                                 <span>{r.emoji}</span> <span className="font-bold">{r.count}</span>
                                             </div>
                                         ))}
                                     </div>
                                 )}
-                                <div className={`absolute -top-4 ${isMe ? 'right-0' : 'left-0'} opacity-0 group-hover/msg:opacity-100 bg-[#111] p-1 rounded-lg border border-white/10 flex gap-1 shadow-xl transition-all z-10`}>
-                                    <button onClick={()=>onReact(m._id, '👍')} className="hover:bg-white/10 p-1 rounded">👍</button>
-                                    <button onClick={()=>onReact(m._id, '❤️')} className="hover:bg-white/10 p-1 rounded">❤️</button>
-                                    {isMe && <button onClick={()=>onEdit(m)} className="hover:text-blue-400 p-1"><Edit2 size={12}/></button>}
-                                    {isMe && <button onClick={()=>onDelete(m._id)} className="hover:text-red-400 p-1"><Trash size={12}/></button>}
+                                <div className={`absolute -top-3 ${isMe ? 'right-0' : 'left-0'} opacity-0 group-hover/msg:opacity-100 bg-[#313338] p-1 rounded-lg border border-[#26272D] flex gap-1 shadow-sm transition-all z-10`}>
+                                    <button onClick={()=>onReact(m._id, '👍')} className="hover:bg-[#404249] p-1 rounded text-lg">👍</button>
+                                    <button onClick={()=>onReact(m._id, '🔥')} className="hover:bg-[#404249] p-1 rounded text-lg">🔥</button>
+                                    {isMe && <button onClick={()=>onEdit(m)} className="hover:text-blue-400 p-1"><Edit2 size={14}/></button>}
+                                    {isMe && <button onClick={()=>onDelete(m._id)} className="hover:text-red-400 p-1"><Trash size={14}/></button>}
                                 </div>
                             </div>
                         </div>
@@ -458,13 +594,13 @@ function ChatInput({ onSend, onUpload, placeholder }) {
     };
 
     return (
-        <div className="p-4 bg-[#1E1F22] shrink-0 z-20 relative">
+        <div className="p-4 bg-[#313338] shrink-0 z-20 relative px-4 pb-6">
             {showEmoji && <div className="absolute bottom-20 right-4 z-50"><EmojiPicker theme="dark" onEmojiClick={(e)=>setText(prev=>prev+e.emoji)}/></div>}
-            <div className="flex items-center gap-3 bg-[#383A40] p-2.5 px-4 rounded-[24px] focus-within:ring-1 focus-within:ring-[var(--primary)] transition-all">
-                <label className="cursor-pointer text-gray-400 hover:text-white p-1 hover:bg-[#2B2D31] rounded-full transition-colors"><Paperclip size={20}/><input type="file" hidden onChange={handleFile}/></label>
-                <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') send()}} className="flex-1 bg-transparent outline-none text-gray-200 text-sm py-1 placeholder:text-gray-500 font-medium" placeholder={placeholder} />
-                <button onClick={()=>setShowEmoji(!showEmoji)} className="text-gray-400 hover:text-yellow-400 transition-colors"><Smile size={20}/></button>
-                <button onClick={send} className="text-gray-400 hover:text-[var(--primary)] transition-colors"><Send size={20}/></button>
+            <div className="flex items-center gap-3 bg-[#383A40] p-2.5 px-4 rounded-lg">
+                <label className="cursor-pointer text-[#B5BAC1] hover:text-[#DBDEE1] p-1"><Plus size={20} className="bg-[#2B2D31] rounded-full p-0.5"/><input type="file" hidden onChange={handleFile}/></label>
+                <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter') send()}} className="flex-1 bg-transparent outline-none text-[#DBDEE1] text-[15px] py-1 placeholder:text-[#949BA4]" placeholder={placeholder} />
+                <button onClick={()=>setShowEmoji(!showEmoji)} className="text-[#B5BAC1] hover:text-[#E0C259] transition-colors"><Smile size={24}/></button>
+                <button onClick={send} className="text-[#B5BAC1] hover:text-[var(--primary)] transition-colors"><Send size={24}/></button>
             </div>
         </div>
     )
@@ -474,8 +610,6 @@ function ChatView({ user, noiseSuppression }) {
   const { friendId } = useParams();
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
-  
-  // Call State
   const [callActive, setCallActive] = useState(false);
   const [isIncoming, setIsIncoming] = useState(null);
   const [localStream, setLocalStream] = useState(null);
@@ -483,8 +617,8 @@ function ChatView({ user, noiseSuppression }) {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(false);
   const [isScreenOn, setIsScreenOn] = useState(false);
-  
   const peerRef = useRef();
+  
   const friend = activeChat?.members?.find(m => m._id !== user._id);
 
   useEffect(() => {
@@ -511,7 +645,6 @@ function ChatView({ user, noiseSuppression }) {
   const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { chatId: activeChat._id, msgId: m._id, newText: t }); };
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
 
-  // Call Logic (WebRTC)
   const getMediaConstraints = (video) => ({
       video: video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
       audio: { echoCancellation: true, noiseSuppression: noiseSuppression, autoGainControl: true }
@@ -532,7 +665,6 @@ function ChatView({ user, noiseSuppression }) {
       const s = await navigator.mediaDevices.getUserMedia(getMediaConstraints(false)); 
       setLocalStream(s); setCallActive(true); setIsIncoming(null); setIsCamOn(false);
       if(isIncoming.call) { isIncoming.call.answer(s); isIncoming.call.on('stream', rs => setRemoteStream(rs)); }
-      else { /* Logic for peerjs bug fallback */ }
   };
 
   const endCall = () => {
@@ -541,36 +673,51 @@ function ChatView({ user, noiseSuppression }) {
       setCallActive(false); setLocalStream(null); setRemoteStream(null); setIsIncoming(null); setIsScreenOn(false);
   };
 
+  const toggleMic = () => {
+      if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } }
+  };
+
+  const toggleCam = async () => {
+      if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } 
+      else {
+          try {
+             const videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280 } });
+             const videoTrack = videoStream.getVideoTracks()[0];
+             localStream.addTrack(videoTrack);
+             const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video');
+             if (sender) sender.replaceTrack(videoTrack); else peerRef.current.peerConnection.addTrack(videoTrack, localStream);
+             setIsCamOn(true);
+          } catch(e) { alert("Камера не найдена"); }
+      }
+  };
+
   const shareScreen = async () => {
       if(!isScreenOn) {
          try {
              const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { width: 1920, height: 1080, frameRate: 60 }, audio: true });
              const screenTrack = screenStream.getVideoTracks()[0];
-             const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); // Simplified
-             // In PeerJS, replacing track is tricky without renegotiation, for simplicity we might need to recall.
-             // But for now let's assume it replaces:
-             if(sender) sender.replaceTrack(screenTrack);
-             screenTrack.onended = () => { setIsScreenOn(false); };
-             setIsScreenOn(true);
+             const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen');
+             if(sender) sender.replaceTrack(screenTrack); else peerRef.current.peerConnection.addTrack(screenTrack, localStream);
+             screenTrack.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true);
          } catch(e) {}
       }
   };
 
-  if (!activeChat) return <div className="flex-1 flex items-center justify-center text-gray-500 font-bold animate-pulse">Загрузка чата...</div>;
+  if (!activeChat) return <div className="flex-1 flex items-center justify-center text-gray-500 font-bold animate-pulse">Загрузка...</div>;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-      <div className="h-12 flex items-center justify-between px-6 border-b border-white/5 bg-[#1E1F22] shrink-0 z-20">
+    <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#313338]">
+      <div className="h-12 flex items-center justify-between px-4 border-b border-[#26272D] bg-[#313338] shadow-sm z-20">
           <div className="flex items-center gap-3">
-             <div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-2 border-[#1E1F22] rounded-full ${friend?.status==='online'?'bg-green-500':friend?.status==='dnd'?'bg-red-500':'bg-yellow-500'}`} /></div>
-             <div><p className="font-bold text-white text-sm">{friend?.displayName}</p><p className="text-[10px] text-gray-400 font-bold">@{friend?.username}</p></div>
+             <div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><StatusDot status={friend?.status}/></div>
+             <div><p className="font-bold text-white text-[15px]">{friend?.displayName}</p><p className="text-[12px] text-[#949BA4]">@{friend?.username}</p></div>
           </div>
-          <div className="flex gap-4 text-gray-400">
-            <Phone size={22} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} />
-            <Video size={24} className="hover:text-gray-200 cursor-pointer transition-colors" onClick={() => startCall(true)} />
+          <div className="flex gap-4 text-[#B5BAC1]">
+            <Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} />
+            <Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} />
           </div>
       </div>
-      <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={()=>{}} toggleCam={()=>{}} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend}/>
+      <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={toggleMic} toggleCam={toggleCam} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend}/>
       <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} />
       <ChatInput onSend={handleSend} onUpload={handleUpload} placeholder={`Написать @${friend?.displayName}`} />
     </div>
@@ -597,38 +744,37 @@ function ServerView({ user, noiseSuppression }) {
     const kickMember = async (id) => { if(server.owner === user._id) await axios.post(`${SERVER_URL}/api/kick-member`, { serverId, userId: id }); };
 
     return (
-        <div className="flex h-full">
+        <div className="flex h-full bg-[#313338]">
             <div className="flex-1 flex flex-col">
                 {channel?.type === 'text' ? (
                     <>
-                        <div className="h-12 border-b border-white/5 flex items-center px-4 font-bold text-white"><Hash size={20} className="mr-2 text-gray-400"/> {channel.name}</div>
+                        <div className="h-12 border-b border-[#26272D] flex items-center px-4 font-bold text-white shadow-sm"><Hash size={24} className="mr-2 text-[#949BA4]"/> {channel.name}</div>
                         <MessageList messages={messages} user={user} onReact={()=>{}} onEdit={()=>{}} onDelete={()=>{}} />
                         <ChatInput onSend={handleSend} onUpload={()=>{}} placeholder={`Написать в #${channel.name}`} />
                     </>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center flex-col">
-                        <Volume2 size={64} className="text-gray-600 mb-4"/>
+                    <div className="flex-1 flex items-center justify-center flex-col text-center">
+                        <Volume2 size={64} className="text-[#404249] mb-6"/>
                         <h2 className="text-2xl font-bold mb-4 text-white">Голосовой канал: {channel?.name}</h2>
                         {!inVoice ? (
-                            <button onClick={()=>setInVoice(true)} className="bg-green-500 px-8 py-2 rounded-xl font-bold text-white shadow-lg hover:bg-green-600 transition-all">Подключиться</button>
+                            <button onClick={()=>setInVoice(true)} className="bg-[#5865F2] px-8 py-2.5 rounded text-white font-bold hover:bg-[#4752C4] transition-all">Подключиться</button>
                         ) : (
                             <div className="text-center">
                                 <p className="text-green-400 mb-4 font-bold">Вы подключены</p>
-                                <button onClick={()=>setInVoice(false)} className="bg-red-500 px-8 py-2 rounded-xl font-bold text-white shadow-lg hover:bg-red-600 transition-all">Отключиться</button>
+                                <button onClick={()=>setInVoice(false)} className="bg-[#F23F43] px-8 py-2.5 rounded text-white font-bold hover:bg-[#D9363A] transition-all">Отключиться</button>
                             </div>
                         )}
                     </div>
                 )}
             </div>
-            {/* RIGHT SIDEBAR MEMBERS */}
-            <div className="w-60 bg-[#2B2D31] p-4 overflow-y-auto border-l border-white/5">
-                <h3 className="text-xs font-black text-gray-400 uppercase mb-4 tracking-widest">Участники — {server?.members?.length}</h3>
+            <div className="w-60 bg-[#2B2D31] p-4 overflow-y-auto">
+                <h3 className="text-xs font-bold text-[#949BA4] uppercase mb-4">Участники — {server?.members?.length}</h3>
                 {server?.members?.map(m => (
-                    <div key={m._id} onContextMenu={(e)=>{e.preventDefault(); if(server.owner===user._id && m._id!==user._id) if(window.confirm("Кикнуть?")) kickMember(m._id)}} className="flex items-center gap-2 mb-2 p-1.5 hover:bg-[#35373C] rounded-lg cursor-pointer opacity-90 hover:opacity-100 transition-all">
+                    <div key={m._id} onContextMenu={(e)=>{e.preventDefault(); if(server.owner===user._id && m._id!==user._id) if(window.confirm("Кикнуть?")) kickMember(m._id)}} className="flex items-center gap-2 mb-2 p-1.5 hover:bg-[#35373C] rounded cursor-pointer opacity-90 hover:opacity-100 transition-all">
                         <img src={m.avatar} className="w-8 h-8 rounded-full bg-zinc-800 object-cover" alt="av"/>
                         <div>
-                            <p className={`font-bold text-sm ${server.owner===m._id ? 'text-yellow-500' : 'text-gray-300'}`}>{m.displayName} {server.owner===m._id && <Crown size={12} className="inline ml-1"/>}</p>
-                            <p className="text-[10px] text-gray-500 font-medium">{m.status}</p>
+                            <p className={`font-bold text-sm ${server.owner===m._id ? 'text-[#F0B232]' : 'text-[#DBDEE1]'}`}>{m.displayName} {server.owner===m._id && <Crown size={12} className="inline ml-1"/>}</p>
+                            <p className="text-[11px] text-[#949BA4] font-medium">{m.status}</p>
                         </div>
                     </div>
                 ))}
@@ -658,12 +804,12 @@ function FriendsView({ user, refresh }) {
 
     return (
       <div className="flex flex-col h-full bg-[#313338]">
-        <div className="h-12 flex items-center px-6 border-b border-[#1f2023] gap-6 shadow-sm">
+        <div className="h-12 flex items-center px-6 border-b border-[#1F2023] gap-6 shadow-sm">
           <div className="flex items-center gap-2 text-white font-bold"><Users size={20} /><span>Друзья</span></div>
-          <div className="h-4 w-[1px] bg-white/10"/>
+          <div className="h-6 w-[1px] bg-[#3F4147]"/>
           <div className="flex gap-2">
               {['all', 'pending', 'add'].map(t => (
-              <button key={t} onClick={() => {setTab(t); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-sm font-medium transition-colors ${tab === t ? (t==='add'?'text-green-500 bg-transparent':'bg-[#404249] text-white') : (t==='add'?'bg-green-600 text-white px-3':'text-gray-400 hover:bg-[#35373C] hover:text-gray-200')}`}>
+              <button key={t} onClick={() => {setTab(t); setError(""); setSuccess("");}} className={`px-2 py-0.5 rounded text-[15px] font-medium transition-colors ${tab === t ? (t==='add'?'text-[#23A559] bg-transparent':'bg-[#404249] text-white') : (t==='add'?'bg-[#23A559] text-white px-3':'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]')}`}>
                   {t === 'all' ? 'Все' : t === 'pending' ? 'Ожидание' : 'Добавить друга'}
               </button>
               ))}
@@ -672,11 +818,11 @@ function FriendsView({ user, refresh }) {
         <div className="p-8 overflow-y-auto">
           {tab === 'all' && (
               <>
-                <p className="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wide">Все друзья — {user?.friends?.length || 0}</p>
+                <p className="text-xs font-bold text-[#B5BAC1] uppercase mb-4 tracking-wide">Все друзья — {user?.friends?.length || 0}</p>
                 {user?.friends?.map(f => (
-                    <div key={f._id} onClick={() => navigate(`/chat/${f._id}`)} className="flex items-center justify-between p-2.5 hover:bg-[#35373C] rounded-lg cursor-pointer group border-t border-[#3f4147] border-opacity-50">
-                        <div className="flex items-center gap-3"><img src={f.avatar} className="w-8 h-8 rounded-full object-cover" alt="av" /><div><p className="font-bold text-white text-sm">{f.displayName} <span className="hidden group-hover:inline text-gray-400 text-xs font-normal">{f.username}</span></p><p className="text-[11px] text-gray-400">{f.status}</p></div></div>
-                        <div className="p-2 bg-[#2b2d31] rounded-full text-gray-400 group-hover:text-gray-200"><MessageSquare size={16} /></div>
+                    <div key={f._id} onClick={() => navigate(`/chat/${f._id}`)} className="flex items-center justify-between p-2.5 hover:bg-[#35373C] rounded-lg cursor-pointer group border-t border-[#3F4147] border-opacity-50">
+                        <div className="flex items-center gap-3"><img src={f.avatar} className="w-8 h-8 rounded-full object-cover" alt="av" /><div><p className="font-bold text-white text-[15px]">{f.displayName} <span className="hidden group-hover:inline text-[#949BA4] text-xs font-medium">@{f.username}</span></p><p className="text-[11px] text-[#949BA4] font-bold">{f.status}</p></div></div>
+                        <div className="p-2 bg-[#2B2D31] rounded-full text-[#B5BAC1] group-hover:text-[#DBDEE1]"><MessageSquare size={18} /></div>
                     </div>
                 ))}
               </>
@@ -684,14 +830,14 @@ function FriendsView({ user, refresh }) {
           {tab === 'add' && (
             <div className="w-full max-w-2xl">
               <h3 className="text-white font-bold text-base mb-2 uppercase">Добавить друга</h3>
-              <p className="text-gray-400 text-xs mb-4">Вы можете добавить друзей по имени пользователя (например: graphi).</p>
-              <div className={`bg-[#1e1f22] p-2 rounded-lg border flex items-center transition-all ${borderClass}`}><input value={friendInput} onChange={handleInput} className="bg-transparent flex-1 p-2 outline-none text-white text-sm placeholder:text-gray-500" placeholder="Имя пользователя" /><button onClick={sendRequest} disabled={!friendInput} className={`px-4 py-1.5 rounded text-sm font-medium text-white transition-colors ${friendInput ? 'bg-[#5865F2] hover:bg-[#4752c4]' : 'bg-[#3b405a] cursor-not-allowed opacity-50'}`}>Отправить запрос</button></div>
-              {success && <p className="text-green-500 text-xs mt-2 font-medium">{success}</p>}
-              {error && <p className="text-red-500 text-xs mt-2 font-medium">{error}</p>}
+              <p className="text-[#B5BAC1] text-sm mb-4">Вы можете добавить друзей по имени пользователя.</p>
+              <div className={`bg-[#1E1F22] p-2 rounded-lg border flex items-center transition-all ${borderClass}`}><input value={friendInput} onChange={handleInput} className="bg-transparent flex-1 p-2 outline-none text-white text-[15px] placeholder:text-[#87898C]" placeholder="Имя пользователя" /><button onClick={sendRequest} disabled={!friendInput} className={`px-4 py-1.5 rounded text-sm font-medium text-white transition-colors ${friendInput ? 'bg-[#5865F2] hover:bg-[#4752c4]' : 'bg-[#3B405A] cursor-not-allowed opacity-50'}`}>Отправить запрос</button></div>
+              {success && <p className="text-[#23A559] text-sm mt-2 font-medium">{success}</p>}
+              {error && <p className="text-[#F23F43] text-sm mt-2 font-medium">{error}</p>}
             </div>
           )}
           {tab === 'pending' && user?.requests?.map(r => (
-              <div key={r.from} className="flex items-center justify-between p-3 hover:bg-[#35373C] rounded-lg border-t border-[#3f4147]"><div className="flex items-center gap-3"><img src={r.avatar} className="w-8 h-8 rounded-full" alt="av"/><div><p className="font-bold text-white text-sm">{r.displayName}</p><p className="text-xs text-gray-400">Входящий запрос</p></div></div><div className="flex gap-2"><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'accept' }); refresh(); }} className="p-2 bg-[#2b2d31] hover:text-green-500 rounded-full"><Check size={16}/></button><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'decline' }); refresh(); }} className="p-2 bg-[#2b2d31] hover:text-red-500 rounded-full"><X size={16}/></button></div></div>
+              <div key={r.from} className="flex items-center justify-between p-3 hover:bg-[#35373C] rounded-lg border-t border-[#3F4147]"><div className="flex items-center gap-3"><img src={r.avatar} className="w-8 h-8 rounded-full" alt="av"/><div><p className="font-bold text-white text-sm">{r.displayName}</p><p className="text-xs text-[#949BA4]">Входящий запрос</p></div></div><div className="flex gap-2"><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'accept' }); refresh(); }} className="p-2 bg-[#2B2D31] hover:text-[#23A559] rounded-full"><Check size={18}/></button><button onClick={async () => { await axios.post(`${SERVER_URL}/api/handle-request`, { userId: user._id, fromId: r.from, action: 'decline' }); refresh(); }} className="p-2 bg-[#2B2D31] hover:text-[#F23F43] rounded-full"><X size={18}/></button></div></div>
           ))}
         </div>
       </div>
@@ -707,14 +853,14 @@ function CreateServerModal({ user, onClose, refresh }) {
     };
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[500]">
-            <motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-3xl text-center w-full max-w-sm shadow-2xl border border-white/10">
-                <h2 className="text-2xl font-black text-white mb-2">Создать сервер</h2>
-                <p className="text-gray-400 text-xs mb-6 px-4">Сервер — это место, где вы можете общаться с друзьями.</p>
-                <div className="uppercase text-[10px] font-black text-gray-400 mb-2 text-left tracking-widest">Название сервера</div>
-                <input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none mb-6 text-sm" />
+            <motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-[5px] text-center w-full max-w-sm shadow-2xl">
+                <h2 className="text-2xl font-bold text-white mb-2">Создать сервер</h2>
+                <p className="text-[#B5BAC1] text-[15px] mb-6 px-4">Сервер — это место, где вы можете общаться с друзьями.</p>
+                <div className="uppercase text-xs font-bold text-[#B5BAC1] mb-2 text-left">Название сервера</div>
+                <input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none mb-6 text-[15px]" />
                 <div className="flex justify-between items-center">
-                    <button onClick={onClose} className="text-gray-300 hover:underline text-sm font-bold">Назад</button>
-                    <button onClick={create} className="bg-[#5865F2] hover:bg-[#4752c4] px-8 py-2.5 rounded-xl text-white font-bold text-sm transition-all shadow-lg">Создать</button>
+                    <button onClick={onClose} className="text-[#B5BAC1] hover:underline text-sm font-medium">Назад</button>
+                    <button onClick={create} className="bg-[#5865F2] hover:bg-[#4752c4] px-6 py-2.5 rounded-[3px] text-white font-medium text-sm transition-all">Создать</button>
                 </div>
             </motion.div>
         </div>
@@ -727,8 +873,6 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
     const [bio, setBio] = useState(user?.bio || "");
     const [banner, setBanner] = useState(user?.bannerColor || "#000000");
     const [file, setFile] = useState(null);
-    
-    // Account changes
     const [email, setEmail] = useState(user?.email || "");
     const [newPass, setNewPass] = useState("");
     const [currPass, setCurrPass] = useState("");
@@ -748,97 +892,96 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8">
-             <motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[30px] flex overflow-hidden shadow-2xl border border-white/5">
-                 {/* SIDEBAR */}
-                 <div className="w-64 bg-[#2B2D31] p-6 pt-10">
-                     <p className="uppercase text-[10px] font-black text-gray-400 px-2 mb-2 tracking-widest">Настройки пользователя</p>
-                     <div onClick={()=>setActiveTab('account')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Моя учетная запись</div>
-                     <div onClick={()=>setActiveTab('profile')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Профиль</div>
-                     <div className="h-[1px] bg-white/10 my-4 mx-2"/>
-                     <div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div>
+             <motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[5px] flex overflow-hidden shadow-2xl">
+                 <div className="w-60 bg-[#2B2D31] p-4 pt-10 flex flex-col items-end">
+                     <div className="w-44 space-y-0.5">
+                         <p className="uppercase text-xs font-bold text-[#949BA4] px-2 mb-2">Настройки пользователя</p>
+                         <div onClick={()=>setActiveTab('account')} className={`px-2 py-1.5 rounded-[4px] text-[15px] font-medium cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>Моя учетная запись</div>
+                         <div onClick={()=>setActiveTab('profile')} className={`px-2 py-1.5 rounded-[4px] text-[15px] font-medium cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-[#B5BAC1] hover:bg-[#35373C] hover:text-[#DBDEE1]'}`}>Профиль</div>
+                         <div className="h-[1px] bg-[#3F4147] my-2 mx-2"/>
+                         <div onClick={onLogout} className="text-[#F23F43] hover:bg-[#F23F43]/10 px-2 py-1.5 rounded-[4px] text-[15px] font-medium cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div>
+                     </div>
                  </div>
 
-                 {/* CONTENT */}
                  <div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]">
-                    <div onClick={onClose} className="absolute top-6 right-6 p-2 border-2 border-gray-500 rounded-full text-gray-500 hover:text-white hover:border-white cursor-pointer transition-all opacity-70 hover:opacity-100"><X size={20}/></div>
+                    <div onClick={onClose} className="absolute top-4 right-4 flex flex-col items-center cursor-pointer group text-[#B5BAC1] hover:text-[#DBDEE1]">
+                        <div className="border-2 border-[#B5BAC1] group-hover:border-[#DBDEE1] rounded-full p-1"><X size={18}/></div>
+                        <span className="text-[10px] font-bold mt-1 uppercase">ESC</span>
+                    </div>
                     
                     {activeTab === 'account' && (
                         <>
-                            <h2 className="text-xl font-black text-white mb-6">Моя учетная запись</h2>
-                            <div className="bg-[#1E1F22] rounded-2xl p-6 mb-8 flex items-center gap-6 border border-white/5">
-                                <div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111]" alt="av"/><div className="absolute -bottom-1 -right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div>
-                                <div>
-                                    <h3 className="text-2xl font-black text-white">{user?.displayName}</h3>
-                                    <p className="text-sm font-bold text-gray-400">@{user?.username}</p>
+                            <h2 className="text-xl font-bold text-white mb-6">Моя учетная запись</h2>
+                            <div className="bg-[#1E1F22] rounded-lg p-4 mb-8 flex items-center gap-4 relative overflow-hidden">
+                                <div className="h-24 w-full absolute top-0 left-0 bg-[#000]" style={{backgroundColor: user?.bannerColor || '#000'}}/>
+                                <div className="relative z-10 flex items-center gap-4 w-full pt-12 px-2">
+                                    <div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111] border-[6px] border-[#1E1F22]" alt="av"/><div className="absolute bottom-1 right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div>
+                                    <div className="mt-4">
+                                        <h3 className="text-xl font-bold text-white">{user?.displayName}</h3>
+                                        <p className="text-sm text-[#B5BAC1]">@{user?.username}</p>
+                                    </div>
+                                    <button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-4 py-1.5 rounded-[3px] text-white font-medium text-sm hover:bg-[#4752c4] mt-4">Редактировать профиль</button>
                                 </div>
-                                <button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-6 py-2 rounded-xl text-white font-bold text-sm hover:bg-[#4752c4]">Редактировать профиль</button>
                             </div>
 
-                            <div className="bg-[#1E1F22] rounded-2xl p-6 border border-white/5 space-y-6">
+                            <div className="bg-[#1E1F22] rounded-lg p-4 space-y-6">
                                 <div>
-                                    <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Email</label>
-                                    <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" />
+                                    <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Email</label>
+                                    <input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Новый пароль</label>
-                                        <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" />
+                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Новый пароль</label>
+                                        <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Текущий пароль (для подтверждения)</label>
-                                        <input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" />
+                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Текущий пароль</label>
+                                        <input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
                                     </div>
                                 </div>
                             </div>
                             <div className="mt-6 flex justify-end">
-                                <button onClick={saveAccount} className="bg-green-600 px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-green-500 transition-all">Сохранить изменения</button>
+                                <button onClick={saveAccount} className="bg-[#23A559] px-6 py-2 rounded-[3px] font-medium text-white hover:bg-[#1A8044] transition-all">Сохранить изменения</button>
                             </div>
                         </>
                     )}
 
                     {activeTab === 'profile' && (
                         <>
-                            <h2 className="text-xl font-black text-white mb-6">Профиль</h2>
-                            <div className="bg-[#1E1F22] rounded-2xl overflow-hidden mb-8 border border-white/5">
+                            <h2 className="text-xl font-bold text-white mb-6">Профиль</h2>
+                            <div className="bg-[#1E1F22] rounded-lg overflow-hidden mb-8">
                                 <div style={{ backgroundColor: banner }} className="h-32 w-full relative group">
-                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Settings size={16} className="text-white"/></div></div>
+                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Edit2 size={16} className="text-white"/></div></div>
                                 </div>
-                                <div className="px-6 pb-6 flex justify-between items-end -mt-10">
+                                <div className="px-4 pb-4 flex justify-between items-end -mt-10">
                                     <div className="flex items-end gap-4">
                                         <div className="relative group">
                                             <img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" />
-                                            <label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><Camera size={24} className="text-white"/><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label>
+                                            <label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><span className="text-[10px] font-bold text-white uppercase">Change</span><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="p-6 pt-0 grid grid-cols-2 gap-6">
+                                <div className="p-4 pt-0 grid grid-cols-2 gap-6">
                                     <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Отображаемое имя</label>
-                                        <input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" />
+                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">Отображаемое имя</label>
+                                        <input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none" />
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">О себе</label>
-                                        <textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none h-[46px] resize-none" />
+                                        <label className="text-xs font-bold text-[#B5BAC1] uppercase mb-2 block">О себе</label>
+                                        <textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-2.5 rounded text-white text-[15px] outline-none h-[42px] resize-none" />
                                     </div>
                                 </div>
                             </div>
-                            
-                            <h2 className="text-xl font-black text-white mb-4">Голос и видео</h2>
-                            <div className="bg-[#1E1F22] p-6 rounded-2xl mb-8 border border-white/5">
+                            <h2 className="text-xl font-bold text-white mb-4">Голос и видео</h2>
+                            <div className="bg-[#1E1F22] p-4 rounded-lg mb-8">
                                 <div className="flex items-center justify-between">
-                                    <div>
-                                        <h4 className="font-bold text-gray-200">Шумоподавление</h4>
-                                        <p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p>
-                                    </div>
-                                    <div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}>
-                                        <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/>
-                                    </div>
+                                    <div><h4 className="font-medium text-white">Шумоподавление</h4><p className="text-xs text-[#B5BAC1]">Убирает фоновый шум из вашего микрофона.</p></div>
+                                    <div onClick={()=>setNoise(!noise)} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-[#23A559]' : 'bg-[#80848E]'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-4' : 'translate-x-0'}`}/></div>
                                 </div>
                             </div>
-
                             <div className="flex justify-end gap-4">
-                                <button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button>
-                                <button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button>
+                                <button onClick={onClose} className="text-white hover:underline text-sm font-medium">Отмена</button>
+                                <button onClick={saveProfile} className="bg-[#5865F2] px-6 py-2 rounded-[3px] font-medium text-white hover:bg-[#4752c4] transition-all">Сохранить</button>
                             </div>
                         </>
                     )}
@@ -848,23 +991,18 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
     );
 }
 
+// --- AUTH COMPONENTS ---
 function Auth({ onAuth }) {
   const [isLogin, setIsLogin] = useState(true);
   
-  // Login State
   const [loginData, setLoginData] = useState({ login: '', password: '' });
-  
-  // Register State
   const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
-  const [usernameStatus, setUsernameStatus] = useState(null); // 'checking', 'free', 'taken'
-  
+  const [usernameStatus, setUsernameStatus] = useState(null); 
   const [error, setError] = useState("");
 
-  // Debounce username check
   useEffect(() => {
       if(isLogin || !regData.username) return;
       const timeout = setTimeout(async () => {
-          setUsernameStatus('checking');
           try {
              const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username });
              setUsernameStatus(res.data.available ? 'free' : 'taken');
@@ -874,75 +1012,90 @@ function Auth({ onAuth }) {
   }, [regData.username, isLogin]);
 
   const handleLogin = async () => {
-      try {
-          const res = await axios.post(`${SERVER_URL}/api/login`, loginData);
-          onAuth(res.data);
-      } catch(e) { setError(e.response?.data?.error || "Ошибка входа"); }
+      try { const res = await axios.post(`${SERVER_URL}/api/login`, loginData); onAuth(res.data); } 
+      catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); }
   };
 
   const handleRegister = async () => {
       try {
           if(usernameStatus !== 'free') return setError("Имя пользователя занято");
+          if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения");
           const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } });
           onAuth(res.data);
       } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); }
   };
 
-  // Компоненты формы
-  const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
-      <div className="mb-4">
-          <label className={`block text-xs font-bold uppercase mb-2 ${errorMsg ? 'text-red-400' : 'text-gray-400'}`}>{label} {required && <span className="text-red-400">*</span>} {errorMsg && <span className="italic normal-case ml-1">- {errorMsg}</span>}</label>
-          <input type={type} value={value} onChange={onChange} className="w-full bg-[#1e1f22] p-2.5 rounded text-white outline-none focus:bg-[#1e1f22] text-sm h-10 transition-colors" />
-      </div>
-  );
-
   return (
-    <div className="h-screen flex items-center justify-center relative bg-[#313338] overflow-hidden">
-      <div className="absolute inset-0 bg-[url('https://discord.com/assets/843b08e5830058e3789a24d9c79e6079.svg')] bg-cover opacity-100 z-0"></div>
-      
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[#313338] p-8 rounded-lg shadow-2xl w-full max-w-[480px] z-10 relative">
+    <div className="h-screen flex items-center justify-center relative bg-[#0B0B0C] overflow-hidden">
+      <BackgroundEffect />
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#313338] p-8 rounded-[5px] shadow-2xl w-full max-w-[480px] z-10 relative">
         {isLogin ? (
-            // LOGIN FORM
             <>
                 <h2 className="text-2xl font-bold text-white text-center mb-2">С возвращением!</h2>
-                <p className="text-gray-400 text-center text-sm mb-6">Мы так рады видеть вас снова!</p>
+                <p className="text-[#B5BAC1] text-center text-[15px] mb-6">Мы так рады видеть вас снова!</p>
                 <Input label="Адрес электронной почты или имя пользователя" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})}/>
                 <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
                 <div className="text-[#00A8FC] text-xs font-medium cursor-pointer mb-6 hover:underline">Забыли пароль?</div>
-                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded transition-colors mb-2">Вход</button>
-                <div className="text-xs text-gray-400 mt-2">Нужна учетная запись? <span onClick={()=>setIsLogin(false)} className="text-[#00A8FC] cursor-pointer hover:underline">Зарегистрироваться</span></div>
+                <button onClick={handleLogin} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all mb-2 text-sm">Вход</button>
+                <div className="text-xs text-[#949BA4] mt-2">Нужна учетная запись? <span onClick={()=>{setIsLogin(false); setError("")}} className="text-[#00A8FC] cursor-pointer hover:underline ml-1">Зарегистрироваться</span></div>
             </>
         ) : (
-            // REGISTER FORM
-            <div className="max-h-[80vh] overflow-y-auto no-scrollbar pr-2">
+            <div className="max-h-[85vh] overflow-y-auto no-scrollbar pr-1">
                 <h2 className="text-2xl font-bold text-white text-center mb-6">Создать учетную запись</h2>
                 <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
                 <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
-                
                 <div className="mb-4">
-                    <label className={`block text-xs font-bold uppercase mb-2 ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>Имя пользователя <span className="text-red-400">*</span></label>
-                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1e1f22] p-2.5 rounded text-white outline-none text-sm h-10 border border-transparent focus:border-black/0" />
-                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1">Супер! Это имя пользователя свободно.</p>}
-                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1">Имя занято.</p>}
+                    <label className={`block text-[11px] font-bold uppercase mb-1.5 ${usernameStatus==='taken'?'text-red-400':'text-[#B5BAC1]'}`}>Имя пользователя <span className="text-red-400">*</span></label>
+                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium" />
+                    {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-medium">Супер! Это имя свободно.</p>}
+                    {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-medium">Имя занято.</p>}
                 </div>
-
                 <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
-                
                 <div className="mb-6">
-                    <label className="block text-xs font-bold uppercase text-gray-400 mb-2">Дата рождения <span className="text-red-400">*</span></label>
+                    <label className="block text-[11px] font-bold uppercase text-[#B5BAC1] mb-1.5">Дата рождения <span className="text-red-400">*</span></label>
                     <div className="flex gap-3">
-                        <select className="bg-[#1e1f22] text-gray-300 p-2 rounded w-1/3 outline-none text-sm" onChange={e=>setRegData({...regData, day:e.target.value})}><option>День</option>{[...Array(31)].map((_,i)=><option key={i}>{i+1}</option>)}</select>
-                        <select className="bg-[#1e1f22] text-gray-300 p-2 rounded w-1/3 outline-none text-sm" onChange={e=>setRegData({...regData, month:e.target.value})}><option>Месяц</option>{["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"].map(m=><option key={m}>{m}</option>)}</select>
-                        <select className="bg-[#1e1f22] text-gray-300 p-2 rounded w-1/3 outline-none text-sm" onChange={e=>setRegData({...regData, year:e.target.value})}><option>Год</option>{[...Array(50)].map((_,i)=><option key={i}>{2024-i}</option>)}</select>
+                        <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
+                        <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
+                        <div className="w-[30%]"><CustomSelect placeholder="Год" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
                     </div>
                 </div>
-
-                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded transition-colors">Продолжить</button>
-                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline" onClick={()=>setIsLogin(true)}>Уже зарегистрированы? Войти</div>
+                <button onClick={handleRegister} className="w-full bg-[#5865F2] hover:bg-[#4752c4] text-white font-bold py-2.5 rounded-[3px] transition-all text-sm">Продолжить</button>
+                <div className="text-xs text-[#00A8FC] mt-4 cursor-pointer hover:underline font-medium text-left" onClick={()=>{setIsLogin(true); setError("")}}>Уже зарегистрированы? Войти</div>
             </div>
         )}
-        {error && <div className="mt-4 bg-red-500/10 border border-red-500 text-white p-2 rounded text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={14}/> {error}</div>}
+        {error && <div className="mt-4 bg-[#F23F43] text-white p-2 rounded text-xs font-medium text-center">{error}</div>}
       </motion.div>
     </div>
   );
 }
+
+// --- HELPER UI ---
+const Input = ({ label, value, onChange, type="text", required=false, errorMsg }) => (
+    <div className="mb-4">
+        <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-[#B5BAC1]'}`}>
+            {label} {required && <span className="text-red-400">*</span>} {errorMsg && <span className="italic normal-case ml-1 font-medium">- {errorMsg}</span>}
+        </label>
+        <input type={type} value={value} onChange={onChange} className="w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white outline-none text-[15px] h-10 transition-all focus:bg-[#1E1F22] focus:ring-0 font-medium" />
+    </div>
+);
+
+const CustomSelect = ({ options, value, onChange, placeholder }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const ref = useRef(null);
+    useEffect(() => { const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); }; document.addEventListener("mousedown", h); return () => document.removeEventListener("mousedown", h); }, []);
+    return (
+        <div className="relative w-full" ref={ref}>
+            <div onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[#1E1F22] p-2.5 rounded-[3px] text-white text-[15px] h-10 flex items-center justify-between cursor-pointer border border-transparent hover:border-[#0B0B0C] transition-colors ${isOpen ? 'rounded-b-none' : ''}`}>
+                <span className={`${!value ? 'text-[#949BA4]' : 'text-white'}`}>{value || placeholder}</span>
+                {isOpen ? <ChevronUp size={16} className="text-[#949BA4]"/> : <ChevronDown size={16} className="text-[#949BA4]"/>}
+            </div>
+            {isOpen && (
+                <div className="absolute top-full left-0 right-0 bg-[#2B2D31] border border-[#1E1F22] border-t-0 max-h-48 overflow-y-auto z-50 rounded-b-[3px] shadow-xl custom-scrollbar">
+                    {options.map((opt, i) => (
+                        <div key={i} onClick={() => { onChange(opt); setIsOpen(false); }} className="p-2 text-[15px] text-[#DBDEE1] hover:bg-[#404249] hover:text-white cursor-pointer transition-colors">{opt}</div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
