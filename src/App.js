@@ -1,3 +1,4 @@
+javascript
 import React, { useState, useEffect, useRef, useCallback, createContext } from 'react';
 import { HashRouter as Router, Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -35,19 +36,69 @@ const SOUNDS = ['bruh', 'airhorn', 'vine-boom', 'cricket', 'anime-wow'];
 
 const ThemeContext = createContext();
 
-// --- HELPERS & COMPONENTS ---
+const LOADING_FACTS = [
+    "Используйте **жирный текст** для акцента.",
+    "Зажмите микрофон для голосового сообщения.",
+    "Перетащите файл в окно чата для отправки.",
+    "Блоки кода ```js code ``` подсвечиваются.",
+    "Нажмите правой кнопкой на сообщение для действий."
+];
 
-const BackgroundEffect = () => (
-    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
-        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] animate-[spin_120s_linear_infinite]"/>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/80"/>
-    </div>
+// --- GLOBAL STYLES ---
+const GlobalStyles = () => (
+    <style>{`
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #111; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #444; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1E1F22; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #000; border-radius: 3px; }
+
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover, 
+        input:-webkit-autofill:focus, 
+        input:-webkit-autofill:active{
+            -webkit-box-shadow: 0 0 0 30px #111 inset !important;
+            -webkit-text-fill-color: white !important;
+            transition: background-color 5000s ease-in-out 0s;
+        }
+        .code-block { font-family: 'Consolas', monospace; font-size: 13px; }
+        .drag-overlay { background: rgba(88, 101, 242, 0.2); border: 2px dashed #5865F2; backdrop-filter: blur(2px); }
+        .mention { background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 2px; border-radius: 3px; font-weight: 500; cursor: pointer; }
+        .mention:hover { background: rgba(88, 101, 242, 0.6); }
+    `}</style>
 );
+
+// --- GLOBAL COMPONENTS ---
 
 const StatusDot = ({ status, size = "w-3 h-3" }) => {
     const color = status === 'online' ? 'bg-green-500' : status === 'dnd' ? 'bg-red-500' : status === 'idle' ? 'bg-yellow-500' : 'bg-gray-500';
     return <div className={`${size} rounded-full ${color} border-[2px] border-[#000] absolute -bottom-0.5 -right-0.5`} />;
 };
+
+const BackgroundEffect = () => (
+    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
+        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] animate-[spin_120s_linear_infinite]"/>
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[var(--primary)]/10 to-transparent"/>
+    </div>
+);
+
+const Input = ({ label, value, onChange, type="text", required=false, errorMsg, className }) => (
+    <div className={`mb-4 ${className}`}>
+        <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${errorMsg ? 'text-red-400' : 'text-gray-400'}`}>
+            {label} {required && <span className="text-red-400">*</span>} 
+            {errorMsg && <span className="italic normal-case ml-1 font-medium">- {errorMsg}</span>}
+        </label>
+        <input 
+            type={type} 
+            value={value} 
+            onChange={onChange} 
+            className="w-full bg-[#111] border border-white/10 focus:border-[var(--primary)] p-2.5 rounded-[3px] text-white outline-none text-sm h-10 transition-all font-medium placeholder:text-gray-600" 
+        />
+    </div>
+);
 
 const CustomSelect = ({ options, value, onChange, placeholder, className }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -59,19 +110,19 @@ const CustomSelect = ({ options, value, onChange, placeholder, className }) => {
     }, []);
     return (
         <div className={`relative w-full ${className}`} ref={ref}>
-            <div onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[#111] border border-white/10 p-2.5 rounded-[3px] text-white text-sm h-10 flex items-center justify-between cursor-pointer hover:border-[var(--primary)] transition-colors`}>
-                <span className="truncate">{value || placeholder}</span>
+            <div onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[#111] border border-white/10 p-2.5 rounded-[3px] text-white text-sm h-10 flex items-center justify-between cursor-pointer hover:border-[var(--primary)] transition-colors ${isOpen ? 'rounded-b-none border-b-0' : ''}`}>
+                <span className={`${!value ? 'text-gray-500' : 'text-white'} truncate`}>{value || placeholder}</span>
                 {isOpen ? <ChevronUp size={16} className="text-gray-500"/> : <ChevronDown size={16} className="text-gray-500"/>}
             </div>
             {isOpen && (
-                <div className="absolute top-full left-0 right-0 bg-[#111] border border-white/10 z-[60] rounded-b-[3px] shadow-xl max-h-48 overflow-y-auto custom-scrollbar">
+                <div className="absolute top-full left-0 right-0 bg-[#050505] border border-white/10 border-t-0 max-h-48 overflow-y-auto z-50 rounded-b-[3px] shadow-xl custom-scrollbar">
                     {options.map((opt, i) => {
-                        const val = typeof opt === 'object' ? opt.value : opt;
-                        const label = typeof opt === 'object' ? opt.label : opt;
-                        return (
-                            <div key={i} onClick={() => { onChange(val); setIsOpen(false); }} className="p-2 text-sm text-gray-300 hover:bg-[var(--primary)] hover:text-white cursor-pointer flex justify-between">
-                                <span className="truncate">{label}</span>
-                                {value === val && <Check size={14} className="text-green-500"/>}
+                         const val = typeof opt === 'object' ? opt.value : opt;
+                         const label = typeof opt === 'object' ? opt.label : opt;
+                         return (
+                            <div key={i} onClick={() => { onChange(val); setIsOpen(false); }} className="p-2 text-sm text-gray-300 hover:bg-[var(--primary)] hover:text-white cursor-pointer transition-colors flex items-center justify-between">
+                                <span>{label}</span>
+                                {value === val && <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center"><Check size={10} className="text-black font-bold"/></div>}
                             </div>
                         )
                     })}
@@ -81,14 +132,21 @@ const CustomSelect = ({ options, value, onChange, placeholder, className }) => {
     );
 };
 
-const Input = ({ label, value, onChange, type="text", className }) => (
-    <div className={`mb-4 ${className}`}>
-        <label className="block text-[11px] font-bold uppercase mb-1.5 text-gray-400 tracking-wide">{label}</label>
-        <input type={type} value={value} onChange={onChange} className="w-full bg-[#111] border border-white/10 p-2.5 rounded-[3px] text-white text-sm outline-none focus:border-[var(--primary)] transition-colors" />
-    </div>
-);
+const Lightbox = ({ src, onClose }) => {
+    if (!src) return null;
+    return (
+        <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center" onClick={onClose}>
+            <img src={src} className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl rounded-lg" onClick={e => e.stopPropagation()} />
+            <button className="absolute top-4 right-4 text-white hover:text-gray-300"><X size={32}/></button>
+        </div>
+    )
+}
 
-// --- CALL HEADER (Moved Top Level) ---
+const Skeleton = ({ className }) => (
+    <div className={`animate-pulse bg-gray-700/50 rounded ${className}`}/>
+)
+
+// --- CALL HEADER COMPONENT ---
 function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localStream, remoteStream, toggleMic, toggleCam, shareScreen, isMicOn, isCamOn, isScreenOn, friend, fullScreen, toggleFull }) {
     if(!callActive && !incoming) return null;
     return (
@@ -131,31 +189,84 @@ function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localS
     )
 }
 
-// --- MAIN APP ---
+// --- MAIN UI COMPONENTS ---
+
+function TitleBar() {
+  if (!ipcRenderer) return null;
+  return (
+    <div className="h-8 bg-[#000] flex items-center justify-between select-none w-full border-b border-white/10 z-[9999] fixed top-0 left-0 right-0 drag-region">
+       <div className="flex items-center gap-2 px-3 no-drag">
+           <div className="w-3 h-3 bg-[var(--primary)] rounded-full flex items-center justify-center font-black text-[6px] text-white">T</div>
+           <span className="text-[10px] font-black text-gray-500 tracking-[0.2em] uppercase">TalkSpace</span>
+       </div>
+       <div className="flex h-full no-drag">
+           <button onClick={() => ipcRenderer.send('app-minimize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Minus size={14} /></button>
+           <button onClick={() => ipcRenderer.send('app-maximize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Square size={12} /></button>
+           <button onClick={() => ipcRenderer.send('app-close')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-red-500 hover:text-white transition-colors"><X size={14} /></button>
+       </div>
+       <style>{`.drag-region { -webkit-app-region: drag; } .no-drag { -webkit-app-region: no-drag; }`}</style>
+    </div>
+  );
+}
+
+function LoadingScreen() {
+    const [fact, setFact] = useState(LOADING_FACTS[0]);
+    useEffect(() => { setFact(LOADING_FACTS[Math.floor(Math.random() * LOADING_FACTS.length)]); }, []);
+    return (
+        <div className="fixed inset-0 bg-[#000] z-[9999] flex flex-col items-center justify-center text-center p-4">
+            <GlobalStyles />
+            <motion.div animate={{ rotate: 360, scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} className="w-20 h-20 bg-[var(--primary)] rounded-full mb-8 flex items-center justify-center shadow-[0_0_50px_rgba(88,101,242,0.8)]"><div className="text-white font-black text-3xl">T</div></motion.div>
+            <h2 className="text-white font-bold text-lg mb-2 uppercase tracking-widest">TalkSpace</h2>
+            <p className="text-gray-500 text-xs tracking-widest animate-pulse mb-6">ESTABLISHING CONNECTION</p>
+            <p className="text-gray-600 text-xs mt-8 max-w-md">💡 {fact}</p>
+        </div>
+    )
+}
+
+function UpdateNotification({ onRestart }) {
+    return (
+        <motion.div initial={{y: 50, opacity: 0}} animate={{y: 0, opacity: 1}} className="absolute bottom-6 left-20 z-[9999] bg-green-600/90 backdrop-blur-md p-3 rounded-xl shadow-2xl border border-green-400 w-64">
+            <div className="flex items-start gap-3">
+                <div className="p-2 bg-white/20 rounded-full"><DownloadCloud size={20} className="text-white"/></div>
+                <div>
+                    <h4 className="font-bold text-white text-sm">Обновление готово!</h4>
+                    <p className="text-[11px] text-green-100 leading-tight my-1">Новая версия загружена.</p>
+                    <button onClick={onRestart} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors flex items-center justify-center gap-2"><RefreshCw size={12}/> Перезапустить</button>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
+
+// --- APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [loading, setLoading] = useState(true);
   const [primaryColor, setPrimaryColor] = useState(localStorage.getItem('accentColor') || '#5865F2');
-  const [updateInfo, setUpdateInfo] = useState({ status: 'idle', version: '' }); // idle, checking, available, downloaded
+  const [updateReady, setUpdateReady] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState({ status: 'idle', version: '' });
 
   useEffect(() => {
       document.documentElement.style.setProperty('--primary', primaryColor);
       
       if (ipcRenderer) {
           ipcRenderer.on('update_available_info', (event, version) => setUpdateInfo({ status: 'available', version }));
-          ipcRenderer.on('update_downloaded', () => setUpdateInfo({ status: 'downloaded', version: '' }));
+          ipcRenderer.on('update_downloaded', () => { setUpdateReady(true); setUpdateInfo({ status: 'downloaded', version: '' }); });
       }
       
-      socket.on('sound_played', (sound) => new Audio(`./sounds/${sound}.mp3`).play().catch(()=>{}));
-      
+      socket.on('sound_played', (sound) => {
+          new Audio(`./sounds/${sound}.mp3`).play().catch(e => console.log("Sound error", e));
+      });
       const checkAuth = async () => {
           if (!token) { setLoading(false); return; }
           try {
               const res = await axios.get(`${SERVER_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
               setUser(res.data);
-              setTimeout(() => setLoading(false), 1000); 
-          } catch (e) { localStorage.clear(); setToken(null); setUser(null); setLoading(false); }
+              setTimeout(() => setLoading(false), 1500); 
+          } catch (e) {
+              localStorage.clear(); setToken(null); setUser(null); setLoading(false);
+          }
       };
       checkAuth();
       return () => socket.off('sound_played');
@@ -163,7 +274,7 @@ export default function App() {
 
   const handleAuth = (data) => {
     localStorage.setItem('token', data.token); setToken(data.token); setUser(data.user); setLoading(true);
-    setTimeout(() => setLoading(false), 1500);
+    setTimeout(() => setLoading(false), 2000);
   };
   const logout = () => { localStorage.clear(); setToken(null); setUser(null); };
   const restartApp = () => { if (ipcRenderer) ipcRenderer.send('restart_app'); };
@@ -177,19 +288,7 @@ export default function App() {
         <div className="bg-[#0B0B0C] text-white font-sans h-screen flex flex-col pt-8 selection:bg-[var(--primary)] selection:text-white overflow-hidden relative">
             <BackgroundEffect />
             <TitleBar />
-            
-            {updateInfo.status === 'downloaded' && (
-                <div className="absolute bottom-6 left-20 z-[9999] bg-green-600/90 backdrop-blur-md p-3 rounded-xl shadow-2xl border border-green-400 w-64 animate-bounce">
-                    <div className="flex items-start gap-3">
-                        <div className="p-2 bg-white/20 rounded-full"><DownloadCloud size={20} className="text-white"/></div>
-                        <div>
-                            <h4 className="font-bold text-white text-sm">Обновление готово!</h4>
-                            <button onClick={restartApp} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors">Перезапустить</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
+            {updateReady && <UpdateNotification onRestart={restartApp} />}
             <div className="flex-1 overflow-hidden relative z-10">
                 <Routes>
                     <Route path="/login" element={!token ? <Auth onAuth={handleAuth} /> : <Navigate to="/friends" />} />
@@ -208,7 +307,6 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
   const [statusMenu, setStatusMenu] = useState(false);
   const [createSeverModal, setCreateServerModal] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); 
-  // Settings State
   const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('noiseSuppression') === 'true');
   const [pttKey, setPttKey] = useState(localStorage.getItem('pttKey') || 'Space');
   const [pttEnabled, setPttEnabled] = useState(localStorage.getItem('pttEnabled') === 'true');
@@ -237,9 +335,14 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
     return () => { socket.off('refresh'); socket.off('new_msg'); socket.off('refresh_user'); };
   }, [user?._id, refresh]);
 
-  const updateStatus = async (status) => {
-    try { await axios.post(`${SERVER_URL}/api/update-profile`, { userId: user._id, status }); setUser({...user, status}); setStatusMenu(false); } catch(e) {}
+  const updateStatus = async (status, activity = "") => {
+    try { await axios.post(`${SERVER_URL}/api/update-profile`, { userId: user._id, status, activity }); setUser({...user, status}); setStatusMenu(false); } catch(e) {}
   };
+
+  const handleContextMenu = (e, s) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, serverId: s._id, ownerId: s.owner, name: s.name }); };
+  const deleteServer = async () => { if(window.confirm(`Удалить ${contextMenu.name}?`)) { await axios.post(`${SERVER_URL}/api/delete-server`, { serverId: contextMenu.serverId }); refresh(); setContextMenu(null); navigate('/friends'); }};
+  const leaveServer = async () => { if(window.confirm(`Выйти из ${contextMenu.name}?`)) { await axios.post(`${SERVER_URL}/api/leave-server`, { serverId: contextMenu.serverId, userId: user._id }); refresh(); setContextMenu(null); navigate('/friends'); }};
+  const inviteServer = () => { navigator.clipboard.writeText("INVITE-" + contextMenu.serverId.slice(-6).toUpperCase()); alert("Код скопирован"); setContextMenu(null); };
 
   return (
     <div className="relative flex h-full z-10 overflow-hidden" onClick={()=>setContextMenu(null)}>
@@ -252,7 +355,11 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
         <div className="w-8 h-[2px] bg-white/10 rounded-full" />
         {user?.servers?.map(s => (
             <div key={s._id} onClick={() => navigate(`/server/${s._id}`)} onContextMenu={(e) => {e.preventDefault(); setContextMenu({x: e.clientX, y: e.clientY, type: 'server', data: s})}} className="w-12 h-12 bg-[#111] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 text-white font-bold uppercase shadow-md relative select-none text-xs overflow-hidden border-none group">
-                {s.icon ? <img src={s.icon} alt="s" className="w-full h-full object-cover"/> : s.name.substring(0, 2)}
+                {s.icon ? (
+                    <img src={s.icon} alt="s" className="w-full h-full object-cover"/>
+                ) : (
+                    s.name.substring(0, 2)
+                )}
             </div>
         ))}
         <button onClick={() => setCreateServerModal(true)} className="w-12 h-12 bg-[#111] text-green-500 hover:bg-green-600 hover:text-white rounded-[24px] hover:rounded-[16px] transition-all flex items-center justify-center shadow-md group"><Plus size={24} /></button>
@@ -277,8 +384,17 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
         </Routes>
       </div>
 
-      {/* GLOBAL CONTEXT MENU */}
-      {contextMenu && <GlobalContextMenu menu={contextMenu} user={user} refresh={refresh} navigate={navigate} close={()=>setContextMenu(null)} />}
+      {contextMenu && (
+          <div style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed bg-[#111] border border-white/10 rounded-[4px] shadow-2xl z-[300] py-1 w-48 font-medium">
+              <button onClick={inviteServer} className="w-full text-left px-2 py-1.5 text-[#B5BAC1] hover:bg-[#5865F2] hover:text-white text-xs flex items-center gap-2 transition-colors"><LinkIcon size={14}/> Пригласить</button>
+              <div className="h-[1px] bg-white/10 my-1"/>
+              {contextMenu.ownerId === user._id ? (
+                  <button onClick={deleteServer} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><Trash size={14}/> Удалить</button>
+              ) : (
+                  <button onClick={leaveServer} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><LeaveIcon size={14}/> Покинуть</button>
+              )}
+          </div>
+      )}
 
       <AnimatePresence>
         {showSettings && <SettingsModal user={user} setUser={setUser} onClose={() => setShowSettings(false)} onLogout={onLogout} noise={noiseSuppression} setNoise={setNoiseSuppression} ptt={pttEnabled} setPtt={setPttEnabled} pttKey={pttKey} setPttKey={setPttKey} selectedMic={selectedMic} setSelectedMic={setSelectedMic} selectedCam={selectedCam} setSelectedCam={setSelectedCam} updateInfo={updateInfo} setUpdateInfo={setUpdateInfo} />}
@@ -299,7 +415,7 @@ const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu,
             </div>
           </button>
           <div className="mt-4 mb-1 px-3 text-[11px] font-bold text-[#949BA4] uppercase tracking-wide flex items-center justify-between select-none hover:text-[#DBDEE1]"><span>Личные сообщения</span> <Plus size={14} className="cursor-pointer"/></div>
-          {user?.chats && user.chats.length > 0 ? user.chats.map(c => {
+          {user?.chats?.length > 0 ? user.chats.map(c => {
             const f = c.members.find(m => m._id !== user._id);
             if (!f) return null;
             return (
@@ -308,7 +424,13 @@ const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu,
                 <div className="flex-1 overflow-hidden leading-tight"><p className="truncate text-[15px] font-medium group-hover:text-[#DBDEE1] transition-colors">{f.displayName || f.username}</p><p className="text-[12px] opacity-70 truncate">{f.status}</p></div>
               </div>
             );
-          }) : <div className="p-4 text-center text-xs text-gray-500 font-bold">Нет чатов</div>}
+          }) : (
+              <div className="px-3">
+                  <Skeleton className="h-10 w-full mb-1"/>
+                  <Skeleton className="h-10 w-full mb-1"/>
+                  <Skeleton className="h-10 w-full mb-1"/>
+              </div>
+          )}
         </div>
         <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} />
     </>
@@ -334,7 +456,7 @@ const ServerSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusM
 };
 
 const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
-    <div className="bg-[#0B0C0E] p-1.5 relative select-none flex items-center gap-1 border-t border-white/5">
+    <div className="bg-[#050505] p-1.5 relative select-none flex items-center gap-1 border-t border-white/5">
        <AnimatePresence>
         {statusMenu && (
           <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: -10, opacity: 1 }} exit={{ opacity: 0 }} className="absolute bottom-full left-2 w-56 bg-[#111] border border-white/10 rounded-lg p-2 shadow-2xl z-50 mb-2">
@@ -698,7 +820,7 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
       
       <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={toggleMic} toggleCam={toggleCam} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend} fullScreen={fullScreen} toggleFull={()=>setFullScreen(!fullScreen)}/>
       
-      <MessageList messages={filteredMessages} user={user} onReact={handleReact} onReply={setReplyTo} onContextMenu={handleContextMenu} />
+      <MessageList messages={filteredMessages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} onContextMenu={handleContextMenu} />
       
       {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
       
@@ -854,7 +976,14 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
                             <div className="flex items-center gap-2">
                                 <div className="relative">
                                     {showSearch ? (
-                                        <input autoFocus onBlur={()=>!searchQuery && setShowSearch(false)} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="bg-[#222] text-white px-2 py-1 rounded text-sm outline-none border border-white/10" placeholder="Поиск..." />
+                                        <input 
+                                            autoFocus 
+                                            onBlur={()=>!searchQuery && setShowSearch(false)} 
+                                            value={searchQuery} 
+                                            onChange={e=>setSearchQuery(e.target.value)} 
+                                            className="bg-[#222] text-white px-2 py-1 rounded text-sm outline-none border border-white/10"
+                                            placeholder="Поиск..."
+                                        />
                                     ) : <Search size={20} className="text-gray-400 hover:text-white cursor-pointer mr-2" onClick={()=>setShowSearch(true)}/>}
                                 </div>
                                 <button onClick={()=>setShowSoundboard(!showSoundboard)} className={`p-2 rounded hover:bg-[#333] transition-colors ${showSoundboard ? 'text-[var(--primary)]' : 'text-gray-400'}`}><Music size={20}/></button>
@@ -871,7 +1000,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
                         )}
                         </AnimatePresence>
 
-                        <MessageList messages={filteredMessages} user={user} onReact={handleReact} onReply={setReplyTo} onContextMenu={handleContextMenu} />
+                        <MessageList messages={filteredMessages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} onContextMenu={handleContextMenu} />
                         {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
                         {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
                         <ChatInput onSend={handleSend} onUpload={handleUpload} onType={handleType} placeholder={`Написать в #${channel.name}`} members={server?.members || []} roomId={serverId} />
@@ -1038,8 +1167,7 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                             {tab === 'account' ? 'Моя учетная запись' : tab === 'profile' ? 'Профиль' : 'Голос и Видео'}
                         </div>
                     ))}
-                    <div className="h-[1px] bg-white/10 my-4 mx-2"/>
-                    <div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div>
+                    <div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div>
                 </div>
 
                 {/* CONTENT */}
@@ -1126,7 +1254,7 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                             <h2 className="text-2xl font-bold text-white mb-6">Голос и Видео</h2>
                             <div className="space-y-6">
                                 <div>
-                                    <label className="block text-[11px] font-bold uppercase mb-1.5 text-gray-400">Устройство ввода</label>
+                                    <label className="block text-[11px] font-bold uppercase mb-1.5 text-gray-400">Устройство ввода (Микрофон)</label>
                                     <CustomSelect value={audioDevices.find(d => d.deviceId === selectedMic)?.label || selectedMic} options={audioDevices.map(d => ({ label: d.label, value: d.deviceId }))} onChange={setSelectedMic} placeholder="Default" />
                                 </div>
                                 <div>
@@ -1136,18 +1264,10 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                                 
                                 <div className="h-[1px] bg-white/10"/>
                                 
-                                <div className="flex items-center justify-between">
-                                    <div><h4 className="font-bold text-white">Шумоподавление</h4><p className="text-xs text-gray-400">Krisp (CPU)</p></div>
-                                    <div onClick={()=>setNoise(!noise)} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-4' : 'translate-x-0'}`}/></div>
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <div><h4 className="font-bold text-white">Push-to-Talk</h4><p className="text-xs text-gray-400">Нажми чтобы говорить</p></div>
-                                    <div onClick={()=>setPtt(!ptt)} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-4' : 'translate-x-0'}`}/></div>
-                                </div>
-                                {ptt && <div className="flex items-center gap-4 bg-[#222] p-2 rounded border border-white/5"><span className="text-sm font-bold text-gray-400 pl-2">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#111] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/30 transition-colors ml-auto">{keyWait ? 'Нажмите...' : pttKey}</button></div>}
-
-                                <div className="h-[1px] bg-white/10"/>
+                                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>
+                                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}
+                                
+                                <div className="h-[1px] bg-white/5"/>
                                 
                                 <div className="bg-[#111] p-4 rounded-xl border border-white/10 flex justify-between items-center">
                                     <div>
@@ -1165,11 +1285,74 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                                     <button onClick={() => { setUpdateInfo({status: 'checking', version: ''}); ipcRenderer.send('check-for-updates-manual'); }} className="text-xs bg-[var(--primary)] hover:bg-[#4752C4] text-white px-4 py-2 rounded font-bold transition-colors">Проверить</button>
                                 </div>
                             </div>
-                            <div className="flex justify-end gap-4 mt-8 pb-10"><button onClick={onClose} className="text-white hover:underline font-bold text-sm">Закрыть</button></div>
+                            <div className="flex justify-end gap-4 mt-8 pb-10"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div>
                         </div>
                     )}
                 </div>
             </motion.div>
         </div>
     );
+}
+
+// --- AUTH COMPONENT (SAME AS BEFORE) ---
+function Auth({ onAuth }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [loginData, setLoginData] = useState({ login: '', password: '' });
+  const [regData, setRegData] = useState({ email: '', displayName: '', username: '', password: '', day: '', month: '', year: '' });
+  const [usernameStatus, setUsernameStatus] = useState(null); 
+  const [error, setError] = useState("");
+
+  useEffect(() => { if(isLogin || !regData.username) return; const timeout = setTimeout(async () => { try { const res = await axios.post(`${SERVER_URL}/api/check-username`, { username: regData.username }); setUsernameStatus(res.data.available ? 'free' : 'taken'); } catch(e) {} }, 500); return () => clearTimeout(timeout); }, [regData.username, isLogin]);
+  const handleLogin = async () => { try { const res = await axios.post(`${SERVER_URL}/api/login`, loginData); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Неверный логин или пароль"); } };
+  const handleRegister = async () => { try { if(usernameStatus !== 'free') return setError("Имя пользователя занято"); if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения"); const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } }); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); } };
+
+  return (
+    <div className="h-screen flex items-center justify-center relative bg-[#000] overflow-hidden drag-region">
+      <div className="absolute inset-0 bg-black">
+          <div className="absolute top-[-20%] left-[-20%] w-[50vw] h-[50vw] bg-blue-900/20 rounded-full blur-[120px]"/>
+          <div className="absolute bottom-[-20%] right-[-20%] w-[50vw] h-[50vw] bg-purple-900/20 rounded-full blur-[120px]"/>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
+      </div>
+
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#050505]/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-[420px] z-10 relative border border-white/10 no-drag">
+        <div className="text-center mb-8">
+            <h1 className="text-3xl font-black text-white tracking-tight">TALKSPACE</h1>
+            <p className="text-gray-500 text-xs tracking-[0.2em] mt-1 font-bold">SECURE COMMUNICATION UPLINK</p>
+        </div>
+
+        {isLogin ? (
+            <>
+                <Input label="Логин" required value={loginData.login} onChange={e=>setLoginData({...loginData, login:e.target.value})} className="mb-6"/>
+                <Input label="Пароль" type="password" required value={loginData.password} onChange={e=>setLoginData({...loginData, password:e.target.value})}/>
+                <button onClick={handleLogin} className="w-full bg-white hover:bg-gray-200 text-black font-black py-3 rounded-[4px] transition-all mb-4 mt-6 uppercase tracking-wider text-xs">Войти в систему</button>
+                <div className="text-xs text-center text-gray-500">Нет аккаунта? <span onClick={()=>setIsLogin(false)} className="text-white cursor-pointer hover:underline font-bold">Создать ID</span></div>
+            </>
+        ) : (
+            <div className="max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
+                <Input label="Никнейм" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
+                
+                <div className="mb-4">
+                    <label className={`block text-[11px] font-bold uppercase mb-1.5 tracking-wide ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>ID (Логин) *</label>
+                    <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className={`w-full bg-[#111] border ${usernameStatus === 'free' ? 'border-green-500/50' : 'border-white/10'} p-2.5 rounded-[3px] text-white outline-none text-sm transition-all`} />
+                </div>
+                
+                <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
+                
+                <div className="mb-6">
+                    <label className="block text-[11px] font-bold uppercase text-gray-400 mb-2">Дата рождения</label>
+                    <div className="flex gap-2">
+                        <div className="w-[30%]"><CustomSelect placeholder="ДД" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
+                        <div className="w-[40%]"><CustomSelect placeholder="ММ" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
+                        <div className="w-[30%]"><CustomSelect placeholder="ГГГГ" value={regData.year} options={[...Array(100)].map((_,i)=>2024-i)} onChange={v=>setRegData({...regData, year:v})} /></div>
+                    </div>
+                </div>
+                <button onClick={handleRegister} className="w-full bg-white hover:bg-gray-200 text-black font-black py-3 rounded-[4px] transition-all mt-4 uppercase tracking-wider text-xs">Инициализация</button>
+                <div className="text-xs text-gray-500 mt-4 cursor-pointer hover:underline font-bold text-center" onClick={()=>{setIsLogin(true); setError("")}}>Вернуться к входу</div>
+            </div>
+        )}
+        {error && <div className="mt-4 bg-red-900/20 border border-red-500/50 text-red-200 p-3 rounded text-xs text-center font-bold flex items-center justify-center gap-2"><AlertCircle size={16}/> {error}</div>}
+      </motion.div>
+    </div>
+  );
 }
