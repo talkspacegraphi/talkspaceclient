@@ -7,13 +7,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import EmojiPicker from 'emoji-picker-react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { 
   Users, MessageSquare, Check, X, Settings, Mic, MicOff, 
   Monitor, Send, Phone, PhoneOff, Video, VideoOff, Plus, 
   Menu, Camera, Smile, Reply, Hash, LogOut, Minus, Square, 
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
   AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
-  DownloadCloud, RefreshCw, Power
+  DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
@@ -22,18 +24,22 @@ const SERVER_URL = "https://talkspace-7fwq.onrender.com";
 const socket = io(SERVER_URL);
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
+// Звуки
 const msgSound = new Audio("./sounds/message.mp3");
 const callSound = new Audio("./sounds/call.mp3");
 callSound.loop = true;
+
+// Саундборд (предполагается наличие файлов в public/sounds/)
+const SOUNDS = ['bruh', 'airhorn', 'vine-boom', 'cricket', 'anime-wow'];
 
 const ThemeContext = createContext();
 
 const LOADING_FACTS = [
     "Используйте **жирный текст** для акцента.",
-    "Вы можете создать свой сервер и пригласить друзей.",
-    "Нажмите на скрепку для отправки фото.",
-    "В настройках можно включить шумоподавление.",
-    "TalkSpace поддерживает демонстрацию экрана в HD."
+    "Отправьте ссылку, чтобы увидеть превью.",
+    "В настройках голоса можно включить Push-to-Talk.",
+    "Блоки кода ```js code ``` автоматически подсвечиваются.",
+    "Нажмите правой кнопкой на сообщение, чтобы закрепить его."
 ];
 
 // --- GLOBAL STYLES ---
@@ -56,6 +62,7 @@ const GlobalStyles = () => (
             -webkit-text-fill-color: white !important;
             transition: background-color 5000s ease-in-out 0s;
         }
+        .code-block { font-family: 'Consolas', monospace; font-size: 13px; }
     `}</style>
 );
 
@@ -79,32 +86,21 @@ const Input = ({ label, value, onChange, type="text", required=false, errorMsg, 
 const CustomSelect = ({ options, value, onChange, placeholder }) => {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
-
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
-        };
+        const handleClickOutside = (event) => { if (ref.current && !ref.current.contains(event.target)) setIsOpen(false); };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
-
     return (
         <div className="relative w-full" ref={ref}>
-            <div 
-                onClick={() => setIsOpen(!isOpen)} 
-                className={`w-full bg-[#111] border border-white/10 p-2.5 rounded-[3px] text-white text-sm h-10 flex items-center justify-between cursor-pointer hover:border-[var(--primary)] transition-colors ${isOpen ? 'rounded-b-none border-b-0' : ''}`}
-            >
+            <div onClick={() => setIsOpen(!isOpen)} className={`w-full bg-[#111] border border-white/10 p-2.5 rounded-[3px] text-white text-sm h-10 flex items-center justify-between cursor-pointer hover:border-[var(--primary)] transition-colors ${isOpen ? 'rounded-b-none border-b-0' : ''}`}>
                 <span className={`${!value ? 'text-gray-500' : 'text-white'}`}>{value || placeholder}</span>
                 {isOpen ? <ChevronUp size={16} className="text-gray-500"/> : <ChevronDown size={16} className="text-gray-500"/>}
             </div>
             {isOpen && (
                 <div className="absolute top-full left-0 right-0 bg-[#050505] border border-white/10 border-t-0 max-h-48 overflow-y-auto z-50 rounded-b-[3px] shadow-xl custom-scrollbar">
                     {options.map((opt, i) => (
-                        <div 
-                            key={i} 
-                            onClick={() => { onChange(opt); setIsOpen(false); }}
-                            className="p-2 text-sm text-gray-300 hover:bg-[var(--primary)] hover:text-white cursor-pointer transition-colors flex items-center justify-between"
-                        >
+                        <div key={i} onClick={() => { onChange(opt); setIsOpen(false); }} className="p-2 text-sm text-gray-300 hover:bg-[var(--primary)] hover:text-white cursor-pointer transition-colors flex items-center justify-between">
                             <span>{opt}</span>
                             {value === opt && <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center"><Check size={10} className="text-black font-bold"/></div>}
                         </div>
@@ -136,18 +132,15 @@ function TitleBar() {
 }
 
 function LoadingScreen() {
+    const [fact, setFact] = useState(LOADING_FACTS[0]);
+    useEffect(() => { setFact(LOADING_FACTS[Math.floor(Math.random() * LOADING_FACTS.length)]); }, []);
     return (
         <div className="fixed inset-0 bg-[#000] z-[9999] flex flex-col items-center justify-center text-center p-4">
             <GlobalStyles />
-            <motion.div 
-                animate={{ rotate: 360, scale: [1, 1.2, 1] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                className="w-20 h-20 bg-[var(--primary)] rounded-full mb-8 flex items-center justify-center shadow-[0_0_50px_rgba(88,101,242,0.8)]"
-            >
-                <div className="text-white font-black text-3xl">T</div>
-            </motion.div>
+            <motion.div animate={{ rotate: 360, scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} className="w-20 h-20 bg-[var(--primary)] rounded-full mb-8 flex items-center justify-center shadow-[0_0_50px_rgba(88,101,242,0.8)]"><div className="text-white font-black text-3xl">T</div></motion.div>
             <h2 className="text-white font-bold text-lg mb-2 uppercase tracking-widest">TalkSpace</h2>
-            <p className="text-gray-500 text-xs tracking-widest animate-pulse">ESTABLISHING CONNECTION</p>
+            <p className="text-gray-500 text-xs tracking-widest animate-pulse mb-6">ESTABLISHING CONNECTION</p>
+            <p className="text-gray-600 text-xs mt-8 max-w-md">💡 {fact}</p>
         </div>
     )
 }
@@ -160,9 +153,7 @@ function UpdateNotification({ onRestart }) {
                 <div>
                     <h4 className="font-bold text-white text-sm">Обновление готово!</h4>
                     <p className="text-[11px] text-green-100 leading-tight my-1">Новая версия загружена.</p>
-                    <button onClick={onRestart} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors flex items-center justify-center gap-2">
-                        <RefreshCw size={12}/> Перезапустить
-                    </button>
+                    <button onClick={onRestart} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors flex items-center justify-center gap-2"><RefreshCw size={12}/> Перезапустить</button>
                 </div>
             </div>
         </motion.div>
@@ -181,11 +172,11 @@ export default function App() {
       document.documentElement.style.setProperty('--primary', primaryColor);
       if (ipcRenderer) {
           ipcRenderer.on('update_downloaded', () => setUpdateReady(true));
-          ipcRenderer.on('deep-link', (event, url) => {
-             console.log("Deep link:", url);
-          });
+          ipcRenderer.on('deep-link', (event, url) => { console.log("Deep link:", url); });
       }
-      
+      socket.on('sound_played', (sound) => {
+          new Audio(`./sounds/${sound}.mp3`).play().catch(e => console.log("Sound error", e));
+      });
       const checkAuth = async () => {
           if (!token) { setLoading(false); return; }
           try {
@@ -197,13 +188,13 @@ export default function App() {
           }
       };
       checkAuth();
+      return () => socket.off('sound_played');
   }, [token, primaryColor]);
 
   const handleAuth = (data) => {
     localStorage.setItem('token', data.token); setToken(data.token); setUser(data.user); setLoading(true);
     setTimeout(() => setLoading(false), 2000);
   };
-
   const logout = () => { localStorage.clear(); setToken(null); setUser(null); };
   const restartApp = () => { if (ipcRenderer) ipcRenderer.send('restart_app'); };
 
@@ -236,6 +227,8 @@ function MainLayout({ user, setUser, onLogout }) {
   const [createSeverModal, setCreateServerModal] = useState(false);
   const [contextMenu, setContextMenu] = useState(null); 
   const [noiseSuppression, setNoiseSuppression] = useState(localStorage.getItem('noiseSuppression') === 'true');
+  const [pttKey, setPttKey] = useState(localStorage.getItem('pttKey') || 'Space');
+  const [pttEnabled, setPttEnabled] = useState(localStorage.getItem('pttEnabled') === 'true');
 
   const refresh = useCallback(async () => {
     try {
@@ -304,7 +297,7 @@ function MainLayout({ user, setUser, onLogout }) {
         <Routes>
           <Route path="/friends" element={<FriendsView user={user} refresh={refresh} />} />
           <Route path="/chat/:friendId" element={<ChatView user={user} noiseSuppression={noiseSuppression} />} />
-          <Route path="/server/:serverId" element={<ServerView user={user} noiseSuppression={noiseSuppression} />} />
+          <Route path="/server/:serverId" element={<ServerView user={user} noiseSuppression={noiseSuppression} pttEnabled={pttEnabled} pttKey={pttKey} />} />
           <Route path="*" element={<Navigate to="/friends" />} />
         </Routes>
       </div>
@@ -322,7 +315,7 @@ function MainLayout({ user, setUser, onLogout }) {
       )}
 
       <AnimatePresence>
-        {showSettings && <SettingsModal user={user} setUser={setUser} onClose={() => setShowSettings(false)} onLogout={onLogout} noise={noiseSuppression} setNoise={setNoiseSuppression} />}
+        {showSettings && <SettingsModal user={user} setUser={setUser} onClose={() => setShowSettings(false)} onLogout={onLogout} noise={noiseSuppression} setNoise={setNoiseSuppression} ptt={pttEnabled} setPtt={setPttEnabled} pttKey={pttKey} setPttKey={setPttKey} />}
         {createSeverModal && <CreateServerModal user={user} onClose={() => setCreateServerModal(false)} refresh={refresh} />}
       </AnimatePresence>
     </div>
@@ -335,7 +328,6 @@ const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, set
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
           <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-all ${window.location.hash.includes('/friends') ? 'bg-[#333] text-white' : 'text-[#949BA4] hover:bg-[#222] hover:text-[#DBDEE1]'}`}>
             <Users size={20} /> <div className="flex-1 flex justify-between items-center"><span className="text-[15px] font-medium">Друзья</span> 
-            {/* IN-MENU BADGE */}
             {user?.requests?.length > 0 && <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 rounded-full min-w-[18px] text-center">{user.requests.length}</span>}
             </div>
           </button>
@@ -397,10 +389,10 @@ const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateSta
 
 // --- CHAT COMPONENTS ---
 
-function ChatInput({ onSend, onUpload, placeholder, members = [] }) {
+function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType }) {
     const [text, setText] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
-    const [mentionSearch, setMentionSearch] = useState(null); // String if searching, null if not
+    const [mentionSearch, setMentionSearch] = useState(null);
     const [mentionIndex, setMentionIndex] = useState(0);
 
     const handleKeyDown = (e) => {
@@ -412,12 +404,13 @@ function ChatInput({ onSend, onUpload, placeholder, members = [] }) {
             else if (e.key === 'Escape') { setMentionSearch(null); }
             return;
         }
-        if (e.key === 'Enter') { onSend(text); setText(""); }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(text); setText(""); }
     };
 
     const handleChange = (e) => {
         const val = e.target.value;
         setText(val);
+        onType && onType();
         
         const lastWord = val.split(" ").pop();
         if (lastWord.startsWith("@")) {
@@ -429,8 +422,7 @@ function ChatInput({ onSend, onUpload, placeholder, members = [] }) {
     };
 
     const insertMention = (user) => {
-        const words = text.split(" ");
-        words.pop();
+        const words = text.split(" "); words.pop();
         setText(words.join(" ") + (words.length > 0 ? " " : "") + `@${user.username} `);
         setMentionSearch(null);
     };
@@ -455,9 +447,6 @@ function ChatInput({ onSend, onUpload, placeholder, members = [] }) {
                             <div><p className="text-white text-xs font-bold">{m.displayName}</p><p className="text-gray-400 text-[10px]">@{m.username}</p></div>
                         </div>
                     ))}
-                    {members.filter(m => m.username.toLowerCase().includes(mentionSearch.toLowerCase())).length === 0 && (
-                        <div className="p-2 text-gray-500 text-xs text-center">Никого не найдено</div>
-                    )}
                 </div>
             )}
 
@@ -471,10 +460,93 @@ function ChatInput({ onSend, onUpload, placeholder, members = [] }) {
     )
 }
 
+function MessageList({ messages, user, onReact, onEdit, onDelete, onPin, onReply }) {
+    const bottomRef = useRef();
+    useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+    const Message = ({ m }) => {
+        const isMe = m.senderId === user._id;
+        const [context, setContext] = useState(null);
+        return (
+            <div className={`group flex gap-4 px-4 py-2 hover:bg-[#111]/50 relative ${m.isPinned ? 'bg-yellow-900/10' : ''}`} onContextMenu={e=>{e.preventDefault(); setContext({x:e.clientX,y:e.clientY})}} onMouseLeave={()=>setContext(null)}>
+                {m.replyTo && (
+                    <div className="absolute -top-3 left-14 flex items-center gap-1 opacity-60 text-xs">
+                        <div className="w-8 h-2 border-t-2 border-l-2 border-gray-500 rounded-tl-md mt-2"/>
+                        <span className="font-bold text-gray-400">@{m.replyTo.senderName}</span>
+                        <span className="text-gray-500 truncate max-w-[200px]">{m.replyTo.text}</span>
+                    </div>
+                )}
+                <img src={m.senderAvatar} className="w-10 h-10 rounded-full bg-zinc-800 object-cover mt-1 cursor-pointer hover:opacity-80" alt="av" />
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-bold text-white cursor-pointer hover:underline">{m.senderName}</span>
+                        <span className="text-[11px] text-[#949BA4]">{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                        {m.isPinned && <Pin size={12} className="text-red-400 rotate-45" />}
+                    </div>
+                    {m.type === 'image' ? (
+                        <img src={m.fileUrl} className="max-w-[400px] max-h-[300px] rounded-lg shadow-lg border border-white/5" alt="attachment"/>
+                    ) : (
+                        <div className="text-[#DBDEE1] text-[15px] leading-relaxed break-words markdown-body">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                                code({node, inline, className, children, ...props}) {
+                                    const match = /language-(\w+)/.exec(className || '')
+                                    return !inline && match ? (
+                                    <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter>
+                                    ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>)
+                                }
+                            }}>{m.text}</ReactMarkdown>
+                            {m.isEdited && <span className="text-[10px] text-gray-500 ml-1">(изм.)</span>}
+                        </div>
+                    )}
+                    
+                    {/* Link Preview */}
+                    {m.ogData && (
+                        <div className="mt-2 border-l-4 border-[var(--primary)] bg-[#1E1F22] rounded p-2 max-w-md">
+                            <h4 className="font-bold text-[#00A8FC] hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
+                            <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
+                            {m.ogData.image && <img src={m.ogData.image} className="mt-2 rounded max-h-40 object-cover w-full" alt="preview"/>}
+                        </div>
+                    )}
+
+                    {/* Reactions */}
+                    {m.reactions?.length > 0 && (
+                        <div className="flex gap-1 mt-1 flex-wrap">
+                            {m.reactions.map((r, i) => (
+                                <div key={i} onClick={()=>onReact(m._id, r.emoji)} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] cursor-pointer border ${r.users.includes(user._id) ? 'bg-[#3b405a] border-[var(--primary)]' : 'bg-[#2B2D31] border-transparent hover:border-gray-500'}`}>
+                                    <span className="text-sm">{r.emoji}</span><span className="text-xs font-bold text-[#B5BAC1]">{r.count}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Hover Actions */}
+                <div className="absolute -top-2 right-4 bg-[#313338] shadow-sm p-1 rounded border border-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
+                    <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
+                    <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Reply size={16}/></button>
+                    {isMe && <button onClick={()=>onEdit(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white"><Edit2 size={16}/></button>}
+                    {isMe && <button onClick={()=>onDelete(m._id)} className="p-1 hover:bg-[#404249] rounded text-red-400 hover:text-red-500"><Trash size={16}/></button>}
+                </div>
+
+                {context && (
+                    <div style={{top:context.y, left:context.x}} className="fixed bg-[#111] border border-white/10 rounded p-1 w-40 z-50 shadow-xl" onMouseLeave={()=>setContext(null)}>
+                        <button onClick={()=>{onPin(m._id, !m.isPinned); setContext(null)}} className="w-full text-left p-2 hover:bg-[var(--primary)] text-xs text-white rounded flex gap-2"><Pin size={14}/> {m.isPinned?'Открепить':'Закрепить'}</button>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    return <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col pb-4">{messages.map(m => <Message key={m._id} m={m} />)}<div ref={bottomRef}/></div>
+}
+
 function ChatView({ user, noiseSuppression }) {
   const { friendId } = useParams();
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [typing, setTyping] = useState([]);
+  const [replyTo, setReplyTo] = useState(null);
+  // Call states
   const [callActive, setCallActive] = useState(false);
   const [isIncoming, setIsIncoming] = useState(null);
   const [localStream, setLocalStream] = useState(null);
@@ -498,75 +570,57 @@ function ChatView({ user, noiseSuppression }) {
     socket.on('new_msg', (m) => { if(m.chatId === activeChat?._id) setMessages(p => [...p, m]); });
     socket.on('message_update', (d) => setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)));
     socket.on('message_delete', (d) => setMessages(p => p.filter(m => m._id !== d.msgId)));
+    
+    // Typing
+    socket.on('user_typing', (u) => setTyping(p => [...new Set([...p, u])]));
+    socket.on('user_stop_typing', (u) => setTyping(p => p.filter(n => n !== u)));
+
     socket.on('incoming_call_signal', (d) => { callSound.play(); setIsIncoming(d); });
     socket.on('call_ended', endCall);
 
-    return () => { socket.off('new_msg'); socket.off('incoming_call_signal'); socket.off('call_ended'); socket.off('message_update'); socket.off('message_delete'); peer.destroy(); endCall(); };
+    return () => { socket.off('new_msg'); socket.off('user_typing'); socket.off('user_stop_typing'); socket.off('incoming_call_signal'); socket.off('call_ended'); socket.off('message_update'); socket.off('message_delete'); peer.destroy(); endCall(); };
   }, [user._id, friendId, activeChat?._id]);
 
-  const handleSend = (text) => socket.emit('send_msg', { chatId: activeChat._id, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text' });
+  const handleSend = (text) => {
+    socket.emit('send_msg', { chatId: activeChat._id, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text', replyTo: replyTo ? { id: replyTo._id, text: replyTo.text, senderName: replyTo.senderName } : null });
+    setReplyTo(null);
+  }
   const handleUpload = (url) => socket.emit('send_msg', { chatId: activeChat._id, text: "", senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'image', fileUrl: url });
   const handleReact = (msgId, emoji) => axios.post(`${SERVER_URL}/api/message/react`, { chatId: activeChat._id, msgId, emoji, userId: user._id });
   const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { chatId: activeChat._id, msgId: m._id, newText: t }); };
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
+  const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { chatId: activeChat._id, msgId, isPinned });
 
-  const getMediaConstraints = (video) => ({
-      video: video ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false,
-      audio: { echoCancellation: true, noiseSuppression: noiseSuppression, autoGainControl: true }
-  });
+  const typingTimeout = useRef();
+  const handleType = () => {
+      socket.emit('typing', { room: activeChat._id, user: user.displayName });
+      clearTimeout(typingTimeout.current);
+      typingTimeout.current = setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
+  };
 
   const startCall = async (withVideo) => {
     try {
-        const s = await navigator.mediaDevices.getUserMedia(getMediaConstraints(withVideo));
+        const s = await navigator.mediaDevices.getUserMedia({ video: withVideo, audio: { echoCancellation: true, noiseSuppression } });
         setLocalStream(s); setCallActive(true); setIsCamOn(withVideo); setIsMicOn(true);
         const call = peerRef.current.call(friendId, s);
         call.on('stream', (rs) => setRemoteStream(rs));
         socket.emit('call_user', { userToCall: friendId, from: user.displayName, fromId: user._id });
     } catch(e) { alert("Ошибка доступа к устройствам."); }
   };
-
   const answerCall = async () => {
       callSound.pause(); callSound.currentTime = 0;
-      const s = await navigator.mediaDevices.getUserMedia(getMediaConstraints(false)); 
+      const s = await navigator.mediaDevices.getUserMedia({ video: false, audio: { noiseSuppression } }); 
       setLocalStream(s); setCallActive(true); setIsIncoming(null); setIsCamOn(false);
       if(isIncoming.call) { isIncoming.call.answer(s); isIncoming.call.on('stream', rs => setRemoteStream(rs)); }
   };
-
   const endCall = () => {
       if(localStream) localStream.getTracks().forEach(t=>t.stop());
       callSound.pause(); callSound.currentTime = 0;
       setCallActive(false); setLocalStream(null); setRemoteStream(null); setIsIncoming(null); setIsScreenOn(false);
   };
-
-  const toggleMic = () => {
-      if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } }
-  };
-
-  const toggleCam = async () => {
-      if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } 
-      else {
-          try {
-             const videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280 } });
-             const videoTrack = videoStream.getVideoTracks()[0];
-             localStream.addTrack(videoTrack);
-             const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video');
-             if (sender) sender.replaceTrack(videoTrack); else peerRef.current.peerConnection.addTrack(videoTrack, localStream);
-             setIsCamOn(true);
-          } catch(e) { alert("Камера не найдена"); }
-      }
-  };
-
-  const shareScreen = async () => {
-      if(!isScreenOn) {
-         try {
-             const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: { width: 1920, height: 1080, frameRate: 60 }, audio: true });
-             const screenTrack = screenStream.getVideoTracks()[0];
-             const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen');
-             if(sender) sender.replaceTrack(screenTrack); else peerRef.current.peerConnection.addTrack(screenTrack, localStream);
-             screenTrack.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true);
-         } catch(e) {}
-      }
-  };
+  const toggleMic = () => { if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } } };
+  const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: true }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
+  const shareScreen = async () => { if(!isScreenOn) { try { const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const st = ss.getVideoTracks()[0]; const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); if(sender) sender.replaceTrack(st); else peerRef.current.peerConnection.addTrack(st, localStream); st.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true); } catch(e) {} } };
 
   if (!activeChat) return <div className="flex-1 flex items-center justify-center text-gray-500 font-bold animate-pulse">Загрузка...</div>;
 
@@ -576,14 +630,21 @@ function ChatView({ user, noiseSuppression }) {
           <div className="flex items-center gap-3"><div className="relative"><img src={friend?.avatar} className="w-8 h-8 rounded-full" alt="f" /><StatusDot status={friend?.status}/></div><div><p className="font-bold text-white text-[15px]">{friend?.displayName}</p><p className="text-[12px] text-[#949BA4]">@{friend?.username}</p></div></div>
           <div className="flex gap-4 text-[#B5BAC1]"><Phone size={24} className="hover:text-green-400 cursor-pointer transition-colors" onClick={() => startCall(false)} /><Video size={24} className="hover:text-white cursor-pointer transition-colors" onClick={() => startCall(true)} /></div>
       </div>
+      
       <CallHeader callActive={callActive} incoming={isIncoming} onAccept={answerCall} onReject={()=>{callSound.pause();setIsIncoming(null)}} onHangup={()=>{socket.emit('hangup', {to: friendId}); endCall()}} localStream={localStream} remoteStream={remoteStream} toggleMic={toggleMic} toggleCam={toggleCam} shareScreen={shareScreen} isMicOn={isMicOn} isCamOn={isCamOn} isScreenOn={isScreenOn} friend={friend}/>
-      <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} />
-      <ChatInput onSend={handleSend} onUpload={handleUpload} placeholder={`Написать @${friend?.displayName}`} members={activeChat.members} />
+      
+      <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
+      
+      {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
+      
+      {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
+      
+      <ChatInput onSend={handleSend} onUpload={handleUpload} onType={handleType} placeholder={`Написать @${friend?.displayName}`} members={activeChat.members} />
     </div>
   );
 }
 
-function ServerView({ user, noiseSuppression }) {
+function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
     const { serverId } = useParams();
     const query = new URLSearchParams(window.location.search);
     const channelId = query.get('channel') || user?.servers?.find(s=>s._id===serverId)?.channels?.[0]?._id;
@@ -592,6 +653,10 @@ function ServerView({ user, noiseSuppression }) {
     const [messages, setMessages] = useState(channel?.messages || []);
     const [inVoice, setInVoice] = useState(false);
     const [localVoiceStream, setLocalVoiceStream] = useState(null);
+    const [typing, setTyping] = useState([]);
+    const [replyTo, setReplyTo] = useState(null);
+    const [speaking, setSpeaking] = useState(false); // Visual indicator
+    const [showSoundboard, setShowSoundboard] = useState(false);
 
     useEffect(() => { 
         socket.emit('join_server_room', serverId); 
@@ -606,56 +671,120 @@ function ServerView({ user, noiseSuppression }) {
         socket.on('new_server_msg', onMsg);
         socket.on('new_server_msg_update', onUpdate);
         socket.on('new_server_msg_delete', onDelete);
+        socket.on('user_typing', (u) => setTyping(p => [...new Set([...p, u])]));
+        socket.on('user_stop_typing', (u) => setTyping(p => p.filter(n => n !== u)));
 
         return () => {
             socket.off('new_server_msg', onMsg);
             socket.off('new_server_msg_update', onUpdate);
             socket.off('new_server_msg_delete', onDelete);
+            socket.off('user_typing'); socket.off('user_stop_typing');
         };
     }, [channelId]);
 
-    const handleSend = (text) => socket.emit('send_msg', { serverId, channelId, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text' });
+    const handleSend = (text) => {
+        socket.emit('send_msg', { serverId, channelId, text, senderId: user._id, senderName: user.displayName, avatar: user.avatar, type: 'text', replyTo: replyTo ? { id: replyTo._id, text: replyTo.text, senderName: replyTo.senderName } : null });
+        setReplyTo(null);
+    }
     const handleReact = (msgId, emoji) => axios.post(`${SERVER_URL}/api/message/react`, { serverId, channelId, msgId, emoji, userId: user._id });
     const handleEdit = (m) => { const t = prompt("Edit:", m.text); if(t) axios.post(`${SERVER_URL}/api/message/edit`, { serverId, channelId, msgId: m._id, newText: t }); };
     const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { serverId, channelId, msgId });
+    const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { serverId, channelId, msgId, isPinned });
     const kickMember = async (id) => { if(server.owner === user._id) await axios.post(`${SERVER_URL}/api/kick-member`, { serverId, userId: id }); };
 
+    const typingTimeout = useRef();
+    const handleType = () => {
+        socket.emit('typing', { room: serverId, user: user.displayName });
+        clearTimeout(typingTimeout.current);
+        typingTimeout.current = setTimeout(() => socket.emit('stop_typing', { room: serverId, user: user.displayName }), 2000);
+    };
+
+    // --- VOICE & PTT LOGIC ---
     const toggleVoice = async () => {
         if (inVoice) {
             setInVoice(false);
-            if(localVoiceStream) {
-                localVoiceStream.getTracks().forEach(t => t.stop());
-                setLocalVoiceStream(null);
-            }
+            if(localVoiceStream) { localVoiceStream.getTracks().forEach(t => t.stop()); setLocalVoiceStream(null); }
         } else {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression, echoCancellation: true } });
                 setLocalVoiceStream(stream);
                 setInVoice(true);
-            } catch (e) {
-                alert("Ошибка доступа к микрофону");
-            }
+                
+                // Visualizer & PTT
+                const audioCtx = new AudioContext();
+                const source = audioCtx.createMediaStreamSource(stream);
+                const analyser = audioCtx.createAnalyser();
+                source.connect(analyser);
+                analyser.fftSize = 256;
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                
+                const checkVolume = () => {
+                    if(!inVoice) return;
+                    analyser.getByteFrequencyData(dataArray);
+                    const avg = dataArray.reduce((a,b)=>a+b) / bufferLength;
+                    setSpeaking(avg > 10);
+                    requestAnimationFrame(checkVolume);
+                }
+                checkVolume();
+
+            } catch (e) { alert("Ошибка доступа к микрофону"); }
         }
     };
 
+    // PTT Handler
+    useEffect(() => {
+        if(!inVoice || !localVoiceStream || !pttEnabled) return;
+        const track = localVoiceStream.getAudioTracks()[0];
+        track.enabled = false; // Start muted
+
+        const down = (e) => { if(e.code === pttKey) track.enabled = true; };
+        const up = (e) => { if(e.code === pttKey) track.enabled = false; };
+        
+        window.addEventListener('keydown', down);
+        window.addEventListener('keyup', up);
+        return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); track.enabled = true; };
+    }, [inVoice, localVoiceStream, pttEnabled, pttKey]);
+
+    const playSound = (sound) => socket.emit('play_sound', { room: serverId, sound });
+
     return (
         <div className="flex h-full bg-[#0B0B0C]">
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col relative">
                 {channel?.type === 'text' ? (
                     <>
-                        <div className="h-12 border-b border-white/5 flex items-center px-4 font-bold text-white shadow-sm"><Hash size={24} className="mr-2 text-gray-500"/> {channel.name}</div>
-                        <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} />
-                        <ChatInput onSend={handleSend} onUpload={()=>{}} placeholder={`Написать в #${channel.name}`} members={server?.members || []} />
+                        <div className="h-12 border-b border-white/5 flex items-center justify-between px-4 font-bold text-white shadow-sm">
+                            <div className="flex items-center"><Hash size={24} className="mr-2 text-gray-500"/> {channel.name}</div>
+                            <button onClick={()=>setShowSoundboard(!showSoundboard)} className={`p-2 rounded hover:bg-[#333] transition-colors ${showSoundboard ? 'text-[var(--primary)]' : 'text-gray-400'}`}><Music size={20}/></button>
+                        </div>
+                        
+                        {/* Soundboard Panel */}
+                        <AnimatePresence>
+                        {showSoundboard && (
+                            <motion.div initial={{height:0}} animate={{height:80}} exit={{height:0}} className="bg-[#111] border-b border-white/5 overflow-hidden flex items-center gap-2 px-4">
+                                {SOUNDS.map(s => (
+                                    <button key={s} onClick={()=>playSound(s)} className="bg-[#2B2D31] hover:bg-[var(--primary)] text-white px-3 py-1 rounded text-xs font-bold uppercase transition-colors">{s}</button>
+                                ))}
+                            </motion.div>
+                        )}
+                        </AnimatePresence>
+
+                        <MessageList messages={messages} user={user} onReact={handleReact} onEdit={handleEdit} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} />
+                        {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
+                        {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
+                        <ChatInput onSend={handleSend} onUpload={()=>{}} onType={handleType} placeholder={`Написать в #${channel.name}`} members={server?.members || []} roomId={serverId} />
                     </>
                 ) : (
                     <div className="flex-1 flex items-center justify-center flex-col text-center">
-                        <Volume2 size={64} className="text-[#404249] mb-6"/>
-                        <h2 className="text-2xl font-bold mb-4 text-white">Голосовой канал: {channel?.name}</h2>
+                        <div className={`p-6 rounded-full transition-all duration-100 ${speaking ? 'bg-green-500/20 scale-110 border-green-500' : 'bg-transparent border-transparent'} border-2`}>
+                             <Volume2 size={64} className="text-[#404249]"/>
+                        </div>
+                        <h2 className="text-2xl font-bold mb-4 mt-6 text-white">Голосовой канал: {channel?.name}</h2>
                         {!inVoice ? (
                             <button onClick={toggleVoice} className="bg-[#5865F2] px-8 py-2.5 rounded text-white font-bold hover:bg-[#4752C4] transition-all">Подключиться</button>
                         ) : (
                             <div className="text-center">
-                                <p className="text-green-400 mb-4 font-bold">Вы подключены</p>
+                                <p className="text-green-400 mb-4 font-bold">Вы подключены {pttEnabled && '(PTT)'}</p>
                                 <button onClick={toggleVoice} className="bg-[#F23F43] px-8 py-2.5 rounded text-white font-bold hover:bg-[#D9363A] transition-all">Отключиться</button>
                             </div>
                         )}
@@ -702,7 +831,7 @@ function CreateServerModal({ user, onClose, refresh }) {
     return (<div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-[500]"><motion.div initial={{scale:0.9, opacity:0}} animate={{scale:1, opacity:1}} className="bg-[#313338] p-6 rounded-3xl text-center w-full max-w-sm shadow-2xl border border-white/10"><h2 className="text-2xl font-black text-white mb-2">Создать сервер</h2><p className="text-gray-400 text-xs mb-6 px-4">Сервер — это место, где вы можете общаться с друзьями.</p><div className="uppercase text-[10px] font-black text-gray-400 mb-2 text-left tracking-widest">Название сервера</div><input value={name} onChange={e=>setName(e.target.value)} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none mb-6 text-sm" /><div className="flex justify-between items-center"><button onClick={onClose} className="text-gray-300 hover:underline text-sm font-bold">Назад</button><button onClick={create} className="bg-[#5865F2] hover:bg-[#4752c4] px-8 py-2.5 rounded-xl text-white font-bold text-sm transition-all shadow-lg">Создать</button></div></motion.div></div>)
 }
 
-function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
+function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt, setPtt, pttKey, setPttKey }) {
     const [activeTab, setActiveTab] = useState('account'); 
     const [displayName, setDisplayName] = useState(user?.displayName || "");
     const [bio, setBio] = useState(user?.bio || "");
@@ -711,6 +840,7 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
     const [email, setEmail] = useState(user?.email || "");
     const [newPass, setNewPass] = useState("");
     const [currPass, setCurrPass] = useState("");
+    const [keyWait, setKeyWait] = useState(false);
     
     // Auto launch state
     const [autoLaunch, setAutoLaunch] = useState(false);
@@ -720,7 +850,12 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
             ipcRenderer.send('get-auto-launch-status');
             ipcRenderer.on('auto-launch-status', (e, isEnabled) => setAutoLaunch(isEnabled));
         }
-    }, []);
+        if(keyWait) {
+            const h = (e) => { e.preventDefault(); setPttKey(e.code); setKeyWait(false); localStorage.setItem('pttKey', e.code); }
+            window.addEventListener('keydown', h);
+            return () => window.removeEventListener('keydown', h);
+        }
+    }, [keyWait]);
 
     const toggleAutoLaunch = () => {
         const newState = !autoLaunch;
@@ -728,13 +863,60 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise }) {
         if (ipcRenderer) ipcRenderer.send('toggle-auto-launch', newState);
     };
 
-    const saveProfile = async () => { const fd = new FormData(); fd.append('userId', user._id); fd.append('displayName', displayName); fd.append('bio', bio); fd.append('bannerColor', banner); if(file) fd.append('avatar', file); try { const res = await axios.post(`${SERVER_URL}/api/update-profile`, fd); setUser(res.data); localStorage.setItem('user', JSON.stringify(res.data)); localStorage.setItem('noiseSuppression', noise); onClose(); } catch(e) { alert("Ошибка"); } };
+    const saveProfile = async () => { const fd = new FormData(); fd.append('userId', user._id); fd.append('displayName', displayName); fd.append('bio', bio); fd.append('bannerColor', banner); if(file) fd.append('avatar', file); try { const res = await axios.post(`${SERVER_URL}/api/update-profile`, fd); setUser(res.data); localStorage.setItem('user', JSON.stringify(res.data)); localStorage.setItem('noiseSuppression', noise); localStorage.setItem('pttEnabled', ptt); onClose(); } catch(e) { alert("Ошибка"); } };
     const saveAccount = async () => { try { await axios.post(`${SERVER_URL}/api/update-account`, { userId: user._id, email, newPassword: newPass, currentPassword: currPass }); alert("Аккаунт обновлен!"); onClose(); } catch(e) { alert(e.response?.data?.error || "Ошибка"); } };
     
-    return (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8"><motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[30px] flex overflow-hidden shadow-2xl border border-white/5"><div className="w-64 bg-[#2B2D31] p-6 pt-10"><p className="uppercase text-[10px] font-black text-gray-400 px-2 mb-2 tracking-widest">Настройки пользователя</p><div onClick={()=>setActiveTab('account')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Моя учетная запись</div><div onClick={()=>setActiveTab('profile')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Профиль</div><div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div></div><div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]"><div onClick={onClose} className="absolute top-6 right-6 p-2 border-2 border-gray-500 rounded-full text-gray-500 hover:text-white hover:border-white cursor-pointer transition-all opacity-70 hover:opacity-100"><X size={20}/></div>{activeTab === 'account' && (<><h2 className="text-xl font-black text-white mb-6">Моя учетная запись</h2><div className="bg-[#1E1F22] rounded-2xl p-6 mb-8 flex items-center gap-6 border border-white/5"><div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111]" alt="av"/><div className="absolute -bottom-1 -right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div><div><h3 className="text-2xl font-black text-white">{user?.displayName}</h3><p className="text-sm font-bold text-gray-400">@{user?.username}</p></div><button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-6 py-2 rounded-xl text-white font-bold text-sm hover:bg-[#4752c4]">Редактировать профиль</button></div><div className="bg-[#1E1F22] rounded-2xl p-6 border border-white/5 space-y-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Email</label><input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Новый пароль</label><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Текущий пароль (для подтверждения)</label><input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div></div></div><div className="mt-6 flex justify-end"><button onClick={saveAccount} className="bg-green-600 px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-green-500 transition-all">Сохранить изменения</button></div></>)}{activeTab === 'profile' && (<><h2 className="text-xl font-black text-white mb-6">Профиль</h2><div className="bg-[#1E1F22] rounded-2xl overflow-hidden mb-8 border border-white/5"><div style={{ backgroundColor: banner }} className="h-32 w-full relative group"><div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Settings size={16} className="text-white"/></div></div></div><div className="px-6 pb-6 flex justify-between items-end -mt-10"><div className="flex items-end gap-4"><div className="relative group"><img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" /><label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><Camera size={24} className="text-white"/><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label></div></div></div><div className="p-6 pt-0 grid grid-cols-2 gap-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Отображаемое имя</label><input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">О себе</label><textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none h-[46px] resize-none" /></div></div></div><h2 className="text-xl font-black text-white mb-4">Настройки приложения</h2><div className="bg-[#1E1F22] p-6 rounded-2xl mb-8 border border-white/5 space-y-6"><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div><div className="h-[1px] bg-white/5"/><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Запускать вместе с Windows</h4><p className="text-xs text-gray-400 mt-1">Автоматически открывать TalkSpace при входе в систему.</p></div><div onClick={toggleAutoLaunch} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${autoLaunch ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${autoLaunch ? 'translate-x-6' : 'translate-x-0'}`}/></div></div></div><div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div></>)}</div></motion.div></div>);
+    return (<div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-8"><motion.div initial={{scale:0.95}} animate={{scale:1}} className="bg-[#313338] w-full max-w-4xl h-[80vh] rounded-[30px] flex overflow-hidden shadow-2xl border border-white/5"><div className="w-64 bg-[#2B2D31] p-6 pt-10"><p className="uppercase text-[10px] font-black text-gray-400 px-2 mb-2 tracking-widest">Настройки пользователя</p><div onClick={()=>setActiveTab('account')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='account' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Моя учетная запись</div><div onClick={()=>setActiveTab('profile')} className={`px-3 py-2 rounded-lg text-sm font-bold mb-1 cursor-pointer ${activeTab==='profile' ? 'bg-[#404249] text-white' : 'text-gray-400 hover:bg-[#35373C]'}`}>Профиль</div><div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div></div><div className="flex-1 p-10 overflow-y-auto relative bg-[#313338]"><div onClick={onClose} className="absolute top-6 right-6 p-2 border-2 border-gray-500 rounded-full text-gray-500 hover:text-white hover:border-white cursor-pointer transition-all opacity-70 hover:opacity-100"><X size={20}/></div>{activeTab === 'account' && (<><h2 className="text-xl font-black text-white mb-6">Моя учетная запись</h2><div className="bg-[#1E1F22] rounded-2xl p-6 mb-8 flex items-center gap-6 border border-white/5"><div className="relative"><img src={user?.avatar} className="w-20 h-20 rounded-full bg-[#111]" alt="av"/><div className="absolute -bottom-1 -right-1 p-1 bg-[#1E1F22] rounded-full"><div className="w-4 h-4 bg-green-500 rounded-full border-2 border-[#1E1F22]"/></div></div><div><h3 className="text-2xl font-black text-white">{user?.displayName}</h3><p className="text-sm font-bold text-gray-400">@{user?.username}</p></div><button onClick={()=>setActiveTab('profile')} className="ml-auto bg-[#5865F2] px-6 py-2 rounded-xl text-white font-bold text-sm hover:bg-[#4752c4]">Редактировать профиль</button></div><div className="bg-[#1E1F22] rounded-2xl p-6 border border-white/5 space-y-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Email</label><input value={email} onChange={e=>setEmail(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Новый пароль</label><input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Текущий пароль (для подтверждения)</label><input type="password" value={currPass} onChange={e=>setCurrPass(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div></div></div><div className="mt-6 flex justify-end"><button onClick={saveAccount} className="bg-green-600 px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-green-500 transition-all">Сохранить изменения</button></div></>)}{activeTab === 'profile' && (<><h2 className="text-xl font-black text-white mb-6">Профиль</h2><div className="bg-[#1E1F22] rounded-2xl overflow-hidden mb-8 border border-white/5"><div style={{ backgroundColor: banner }} className="h-32 w-full relative group"><div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><input type="color" className="cursor-pointer w-8 h-8 opacity-0 absolute" onChange={e=>setBanner(e.target.value)}/><div className="bg-black/50 p-1.5 rounded-lg backdrop-blur-sm"><Settings size={16} className="text-white"/></div></div></div><div className="px-6 pb-6 flex justify-between items-end -mt-10"><div className="flex items-end gap-4"><div className="relative group"><img src={file ? URL.createObjectURL(file) : user?.avatar} className="w-24 h-24 rounded-full border-[6px] border-[#1E1F22] bg-[#1E1F22] object-cover" alt="av" /><label className="absolute inset-0 bg-black/60 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer border-[6px] border-transparent transition-all"><Camera size={24} className="text-white"/><input type="file" hidden onChange={e=>setFile(e.target.files[0])}/></label></div></div></div><div className="p-6 pt-0 grid grid-cols-2 gap-6"><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">Отображаемое имя</label><input value={displayName} onChange={e=>setDisplayName(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none" /></div><div><label className="text-[10px] font-black text-gray-400 uppercase mb-2 block">О себе</label><textarea value={bio} onChange={e=>setBio(e.target.value)} className="w-full bg-[#111] p-3 rounded-xl text-white text-sm outline-none h-[46px] resize-none" /></div></div></div><h2 className="text-xl font-black text-white mb-4">Настройки приложения</h2><div className="bg-[#1E1F22] p-6 rounded-2xl mb-8 border border-white/5 space-y-6"><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div><div className="h-[1px] bg-white/5"/><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}<div className="h-[1px] bg-white/5"/><div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Запускать вместе с Windows</h4><p className="text-xs text-gray-400 mt-1">Автоматически открывать TalkSpace при входе в систему.</p></div><div onClick={toggleAutoLaunch} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${autoLaunch ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${autoLaunch ? 'translate-x-6' : 'translate-x-0'}`}/></div></div></div><div className="flex justify-end gap-4"><button onClick={onClose} className="text-gray-400 hover:text-white font-bold text-sm">Отмена</button><button onClick={saveProfile} className="bg-[#5865F2] px-8 py-2.5 rounded-xl font-bold text-white shadow-lg hover:bg-[#4752c4] transition-all">Сохранить</button></div></>)}</div></motion.div></div>);
 }
 
-// --- REDESIGNED AUTH (BLACK THEME) ---
+// --- CALL HEADER COMPONENT ---
+function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localStream, remoteStream, toggleMic, toggleCam, shareScreen, isMicOn, isCamOn, isScreenOn, friend }) {
+    if(!callActive && !incoming) return null;
+    return (
+        <div className="bg-[#000] p-4 border-b border-white/5 flex flex-col items-center justify-center relative min-h-[200px] z-30">
+            {incoming ? (
+                <div className="text-center animate-bounce">
+                    <img src={friend?.avatar} className="w-20 h-20 rounded-full mx-auto mb-4 border-4 border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.5)]" alt="caller"/>
+                    <h3 className="text-xl font-bold text-white mb-6">Входящий звонок от {friend?.displayName}...</h3>
+                    <div className="flex gap-8 justify-center">
+                        <button onClick={onAccept} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><Phone size={32} className="text-white"/></button>
+                        <button onClick={onReject} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><PhoneOff size={32} className="text-white"/></button>
+                    </div>
+                </div>
+            ) : (
+                <div className="w-full h-full flex flex-col">
+                    <div className="flex-1 flex items-center justify-center gap-4 relative overflow-hidden rounded-xl bg-[#111] mb-4 min-h-[300px]">
+                        {/* Remote Stream */}
+                        {remoteStream && remoteStream.getVideoTracks().length > 0 ? (
+                            <video autoPlay ref={v => v && (v.srcObject = remoteStream)} className="w-full h-full object-contain" />
+                        ) : (
+                            <div className="flex flex-col items-center"><img src={friend?.avatar} className="w-24 h-24 rounded-full mb-4 animate-pulse" alt="friend"/><p className="text-gray-400 font-bold">Звонок идет...</p></div>
+                        )}
+                        {/* Local Stream PIP */}
+                        <div className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg border border-white/10 overflow-hidden shadow-2xl">
+                             {localStream && isCamOn ? <video autoPlay muted ref={v => v && (v.srcObject = localStream)} className="w-full h-full object-cover -scale-x-100" /> : <div className="w-full h-full flex items-center justify-center bg-[#222]"><Users size={24} className="text-gray-500"/></div>}
+                        </div>
+                    </div>
+                    <div className="flex justify-center gap-4">
+                        <button onClick={toggleMic} className={`p-4 rounded-full ${isMicOn ? 'bg-[#2B2D31] hover:bg-[#404249]' : 'bg-red-500 text-white'} transition-colors`}>{isMicOn ? <Mic size={24}/> : <MicOff size={24}/>}</button>
+                        <button onClick={toggleCam} className={`p-4 rounded-full ${isCamOn ? 'bg-[#2B2D31] hover:bg-[#404249]' : 'bg-red-500 text-white'} transition-colors`}>{isCamOn ? <Video size={24}/> : <VideoOff size={24}/>}</button>
+                        <button onClick={shareScreen} className={`p-4 rounded-full ${isScreenOn ? 'bg-green-500 text-white' : 'bg-[#2B2D31] hover:bg-[#404249]'} transition-colors`}><Monitor size={24}/></button>
+                        <button onClick={onHangup} className="p-4 rounded-full bg-red-500 hover:bg-red-600 transition-colors shadow-lg"><PhoneOff size={24} className="text-white"/></button>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+const BackgroundEffect = () => (
+    <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] animate-[spin_100s_linear_infinite]"/>
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[var(--primary)]/10 to-transparent"/>
+    </div>
+);
+
+// --- AUTH COMPONENT (SAME AS BEFORE) ---
 function Auth({ onAuth }) {
   const [isLogin, setIsLogin] = useState(true);
   const [loginData, setLoginData] = useState({ login: '', password: '' });
@@ -747,15 +929,14 @@ function Auth({ onAuth }) {
   const handleRegister = async () => { try { if(usernameStatus !== 'free') return setError("Имя пользователя занято"); if(!regData.day || !regData.month || !regData.year) return setError("Укажите дату рождения"); const res = await axios.post(`${SERVER_URL}/api/register`, { ...regData, dob: { day: regData.day, month: regData.month, year: regData.year } }); onAuth(res.data); } catch(e) { setError(e.response?.data?.error || "Ошибка регистрации"); } };
 
   return (
-    <div className="h-screen flex items-center justify-center relative bg-[#000] overflow-hidden">
-      {/* Abstract Cyber Background */}
+    <div className="h-screen flex items-center justify-center relative bg-[#000] overflow-hidden drag-region">
       <div className="absolute inset-0 bg-black">
           <div className="absolute top-[-20%] left-[-20%] w-[50vw] h-[50vw] bg-blue-900/20 rounded-full blur-[120px]"/>
           <div className="absolute bottom-[-20%] right-[-20%] w-[50vw] h-[50vw] bg-purple-900/20 rounded-full blur-[120px]"/>
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
       </div>
 
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#050505]/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-[420px] z-10 relative border border-white/10">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#050505]/80 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-[420px] z-10 relative border border-white/10 no-drag">
         <div className="text-center mb-8">
             <h1 className="text-3xl font-black text-white tracking-tight">TALKSPACE</h1>
             <p className="text-gray-500 text-xs tracking-[0.2em] mt-1 font-bold">SECURE COMMUNICATION UPLINK</p>

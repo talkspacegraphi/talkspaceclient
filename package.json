@@ -1,36 +1,34 @@
 {
   "name": "talkspace",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": false,
   "main": "electron.js",
   "homepage": "./",
-  "description": "TalkSpace Messenger",
+  "description": "TalkSpace Messenger Ultimate",
   "author": "Graphi",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/talkspacegraphi/talkspaceclient.git"
-  },
   "dependencies": {
-    "axios": "^1.13.2",
-    "electron-log": "^5.4.3",
+    "axios": "^1.6.0",
+    "electron-log": "^5.0.0",
     "electron-squirrel-startup": "^1.0.0",
-    "electron-updater": "^6.1.8",
+    "electron-updater": "^6.1.0",
     "emoji-picker-react": "^4.9.2",
-    "framer-motion": "^12.25.0",
-    "lucide-react": "^0.562.0",
-    "peerjs": "^1.5.5",
+    "framer-motion": "^11.0.0",
+    "lucide-react": "^0.344.0",
+    "open-graph-scraper": "^6.5.0",
+    "peerjs": "^1.5.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
-    "react-router-dom": "^6.22.3",
+    "react-router-dom": "^6.22.0",
     "react-scripts": "5.0.1",
+    "react-syntax-highlighter": "^15.5.0",
     "remark-gfm": "^4.0.0",
-    "socket.io-client": "^4.7.5",
+    "socket.io-client": "^4.7.4",
     "web-vitals": "^2.1.4"
   },
   "devDependencies": {
-    "electron": "^31.7.7",
-    "electron-builder": "^24.13.3"
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -39,65 +37,14 @@
     "dist": "react-scripts build && electron-builder"
   },
   "build": {
-    "extends": null,
     "appId": "com.talkspace.app",
     "productName": "TalkSpace",
-    "extraMetadata": {
-      "homepage": "https://github.com/talkspacegraphi/talkspaceclient"
-    },
-    "files": [
-      "build/**/*",
-      "electron.js"
-    ],
-    "extraResources": [
-      {
-        "from": "public/favicon.ico",
-        "to": "favicon.ico"
-      },
-      {
-        "from": "public/splash.html",
-        "to": "splash.html"
-      }
-    ],
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": [
-        "squirrel"
-      ],
-      "icon": "public/favicon.ico"
-    },
-    "squirrelWindows": {
-      "iconUrl": "https://github.com/talkspacegraphi/talkspaceclient/blob/main/public/favicon.ico?raw=true"
-    },
-    "protocols": [
-      {
-        "name": "TalkSpace URL",
-        "schemes": [
-          "talkspace"
-        ]
-      }
-    ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "talkspacegraphi",
-        "repo": "talkspaceclient"
-      }
-    ],
-    "asar": true
+    "files": ["build/**/*", "electron.js"],
+    "directories": { "output": "dist" },
+    "win": { "target": ["squirrel"], "icon": "public/favicon.ico" }
   },
   "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
   }
 }
