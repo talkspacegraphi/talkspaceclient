@@ -18,7 +18,7 @@ import {
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
   AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
   DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle, Copy, MoreVertical,
-  ArrowUpCircle, Loader2, Headphones, HeadphonesOff
+  ArrowUpCircle, Loader2, Headphones, VolumeX
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
@@ -96,7 +96,7 @@ const StatusDot = ({ status, size = "w-3 h-3" }) => {
 const BackgroundEffect = () => (
     <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden select-none">
         <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-[0.03] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] animate-[spin_120s_linear_infinite]"/>
-        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[var(--primary)]/10 to-transparent"/>
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-b from-transparent via-black/20 to-black/80"/>
     </div>
 );
 
@@ -217,7 +217,6 @@ export default function App() {
       document.documentElement.style.setProperty('--primary', primaryColor);
       
       if (ipcRenderer) {
-          ipcRenderer.on('update_status', (event, data) => setUpdateInfo({ status: data.status, version: data.version }));
           ipcRenderer.on('update_available_info', (event, version) => setUpdateInfo({ status: 'available', version }));
           ipcRenderer.on('update_downloaded', () => { setUpdateReady(true); setUpdateInfo({ status: 'downloaded', version: '' }); });
       }
@@ -259,7 +258,19 @@ export default function App() {
         <div className="bg-[#0B0B0C] text-white font-sans h-screen flex flex-col pt-8 selection:bg-[var(--primary)] selection:text-white overflow-hidden relative">
             <BackgroundEffect />
             <TitleBar />
-            {updateReady && <UpdateNotification onRestart={restartApp} />}
+            
+            {updateInfo.status === 'downloaded' && (
+                <div className="absolute bottom-6 left-20 z-[9999] bg-green-600/90 backdrop-blur-md p-3 rounded-xl shadow-2xl border border-green-400 w-64 animate-bounce">
+                    <div className="flex items-start gap-3">
+                        <div className="p-2 bg-white/20 rounded-full"><DownloadCloud size={20} className="text-white"/></div>
+                        <div>
+                            <h4 className="font-bold text-white text-sm">Обновление готово!</h4>
+                            <button onClick={restartApp} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors">Перезапустить</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex-1 overflow-hidden relative z-10">
                 <Routes>
                     <Route path="/login" element={!token ? <Auth onAuth={handleAuth} /> : <Navigate to="/friends" />} />
@@ -448,7 +459,7 @@ const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateSta
             <span className="hover-tooltip" data-tooltip={micMuted ? "Включить микрофон" : "Выключить микрофон"}></span>
         </button>
         <button className={`p-1.5 hover:bg-[#222] rounded relative group ${soundMuted ? 'text-red-500' : 'text-gray-200'}`} onClick={()=>setSoundMuted(!soundMuted)}>
-            {soundMuted ? <HeadphonesOff size={18}/> : <Headphones size={18}/>}
+            {soundMuted ? <VolumeX size={18}/> : <Volume2 size={18}/>}
             <span className="hover-tooltip" data-tooltip={soundMuted ? "Включить звук" : "Выключить звук"}></span>
         </button>
         <button className="p-1.5 hover:bg-[#222] rounded text-gray-200 relative group" onClick={()=>setShowSettings(true)}>
@@ -479,7 +490,7 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
         <div style={{ top: y, left: x }} className="fixed bg-[#111] border border-black/50 rounded-[4px] shadow-[0_8px_16px_rgba(0,0,0,0.5)] z-[9999] py-1.5 w-56 font-medium text-xs text-gray-300" onMouseLeave={close}>
             {type === 'server' && (
                 <>
-                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить людей</button>
+                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить</button>
                     <div className="h-[1px] bg-white/10 my-1"/>
                     {data.owner === user._id ? (
                         <button onClick={deleteS} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сервер</button>
@@ -493,14 +504,14 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
                     <button onClick={replyMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Reply size={14}/> Ответить</button>
                     <button onClick={copyText} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Copy size={14}/> Копировать текст</button>
                     <button onClick={pinMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Pin size={14}/> {data.isPinned ? 'Открепить' : 'Закрепить'}</button>
-                    <div className="h-[1px] bg-white/10 my-1"/>
                     {data.senderId === user._id && (
                         <>
-                            <button onClick={editMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Edit2 size={14}/> Редактировать сообщение</button>
-                            <button onClick={deleteMsg} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сообщение</button>
+                            <button onClick={editMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Edit2 size={14}/> Изменить</button>
                             <div className="h-[1px] bg-white/10 my-1"/>
+                            <button onClick={deleteMsg} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить</button>
                         </>
                     )}
+                    <div className="h-[1px] bg-white/10 my-1"/>
                     <button onClick={copyId} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2">Копировать ID</button>
                 </>
             )}
@@ -613,9 +624,11 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                     const isNew = (new Date() - new Date(m.createdAt)) < 5 * 60 * 1000 && !isMe;
 
                     return (
-                        <div className="px-4 py-0.5 hover:bg-[#111]/50 relative group pr-16" onContextMenu={(e)=>{e.preventDefault(); onContextMenu(e, m)}}>
+                        <div 
+                            className="px-4 py-0.5 hover:bg-[#111]/50 relative group pr-16" 
+                            onContextMenu={(e)=>{e.preventDefault(); onContextMenu(e, m)}}
+                        >
                              {isNew && showHeader && <div className="flex items-center my-2"><div className="h-[1px] bg-red-500 flex-1"/><span className="text-[10px] text-red-500 font-bold px-2 uppercase">New</span><div className="h-[1px] bg-red-500 flex-1"/></div>}
-                             
                              <div className={`flex gap-4 ${!showHeader ? 'mt-0' : 'mt-4'}`}>
                                  {showHeader ? (
                                      <img src={m.senderAvatar} className="w-10 h-10 rounded-full bg-zinc-800 object-cover cursor-pointer hover:opacity-80" alt="av" />
@@ -624,7 +637,6 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                          {new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                                      </div>
                                  )}
-
                                  <div className="flex-1 min-w-0">
                                      {showHeader && (
                                          <div className="flex items-center gap-2 mb-0.5">
@@ -633,7 +645,6 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                              {m.isPinned && <Pin size={12} className="text-red-400 rotate-45" />}
                                          </div>
                                      )}
-                                     
                                      {m.replyTo && showHeader && (
                                         <div className="flex items-center gap-1 opacity-60 text-xs mb-1">
                                             <div className="w-4 h-2 border-t-2 border-l-2 border-gray-500 rounded-tl-md"/>
@@ -641,7 +652,6 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                             <span className="text-gray-500 truncate max-w-[200px]">{m.replyTo.text}</span>
                                         </div>
                                      )}
-
                                      <div className="text-[#DBDEE1]">
                                          {m.type === 'image' ? (
                                              <img onClick={()=>setLightboxImage(m.fileUrl)} src={m.fileUrl} className="max-w-[300px] max-h-[300px] rounded-lg shadow-lg border border-white/5 cursor-zoom-in" alt="attachment"/>
@@ -683,7 +693,13 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                              </div>
                                          )}
                                      </div>
-
+                                     {m.ogData && (
+                                         <div className="mt-2 border-l-4 border-[var(--primary)] bg-[#1E1F22] rounded p-2 max-w-md">
+                                             <h4 className="font-bold text-[#00A8FC] hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
+                                             <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
+                                             {m.ogData.image && <img src={m.ogData.image} className="mt-2 rounded max-h-40 object-cover w-full" alt="preview"/>}
+                                         </div>
+                                     )}
                                      {m.reactions?.length > 0 && (
                                          <div className="flex gap-1 mt-1 flex-wrap">
                                              {m.reactions.map((r, i) => (
@@ -695,19 +711,11 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                      )}
                                  </div>
                              </div>
-
-                             {/* Modern Hover Actions */}
-                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-[0_2px_4px_rgba(0,0,0,0.2)] p-1 rounded border border-[#2B2D31] flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                 <button onClick={()=>onReact(m._id, '❤️')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Нравится">❤️</button>
-                                 <button onClick={()=>onReact(m._id, '😂')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Смешно">😂</button>
-                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Супер">👍</button>
-                                 
-                                 <div className="w-[1px] h-4 bg-white/10 mx-1"/>
-                                 
-                                 <button onClick={()=>onReact(m._id, '➕')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Добавить реакцию"><Smile size={18}/></button>
-                                 <button onClick={()=>onReply(m)} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Ответить"><Reply size={18}/></button>
-                                 <button className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Переслать"><ArrowUpCircle size={18}/></button>
-                                 <button onClick={(e)=>onContextMenu(e, m)} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Ещё"><MoreVertical size={18}/></button>
+                             {/* Hover Actions (Only Reply & React) */}
+                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-sm p-1 rounded border border-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
+                                 <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
+                                 <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Ответить"><Reply size={16}/></button>
                              </div>
                         </div>
                     )
@@ -738,6 +746,8 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  
+  // Context Menu State
   const [ctxMenu, setCtxMenu] = useState(null);
   
   const friend = activeChat?.members?.find(m => m._id !== user._id);
@@ -755,6 +765,7 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
     socket.on('message_update', (d) => setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)));
     socket.on('message_delete', (d) => setMessages(p => p.filter(m => m._id !== d.msgId)));
     
+    // Typing
     socket.on('user_typing', (u) => setTyping(p => [...new Set([...p, u])]));
     socket.on('user_stop_typing', (u) => setTyping(p => p.filter(n => n !== u)));
 
@@ -774,9 +785,11 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
   const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { chatId: activeChat._id, msgId, isPinned });
 
+  const typingTimeout = useRef();
   const handleType = () => {
       socket.emit('typing', { room: activeChat._id, user: user.displayName });
-      setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
+      clearTimeout(typingTimeout.current);
+      typingTimeout.current = setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
   };
 
   const startCall = async (withVideo) => {
@@ -809,46 +822,17 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
       callSound.pause(); callSound.currentTime = 0;
       setCallActive(false); setLocalStream(null); setRemoteStream(null); setIsIncoming(null); setIsScreenOn(false); setFullScreen(false);
   };
-  const toggleMic = () => { 
-      if(localStream) { 
-          const track = localStream.getAudioTracks()[0]; 
-          if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } 
-      } 
-  };
-  const toggleCam = async () => { 
-      if (isCamOn) { 
-          localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); 
-      } else { 
-          try { 
-              const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); 
-              const vt = vs.getVideoTracks()[0]; 
-              localStream.addTrack(vt); 
-              const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); 
-              if (sender) sender.replaceTrack(vt); 
-              else peerRef.current.peerConnection.addTrack(vt, localStream); 
-              setIsCamOn(true); 
-          } catch(e) { alert("Камера не найдена"); } 
-      } 
-  };
-  const shareScreen = async () => { 
-      if(!isScreenOn) { 
-          try { 
-              const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); 
-              const st = ss.getVideoTracks()[0]; 
-              const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); 
-              if(sender) sender.replaceTrack(st); 
-              else peerRef.current.peerConnection.addTrack(st, localStream); 
-              st.onended = () => { setIsScreenOn(false); }; 
-              setIsScreenOn(true); 
-          } catch(e) {} 
-      } 
-  };
+  const toggleMic = () => { if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } } };
+  const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
+  const shareScreen = async () => { if(!isScreenOn) { try { const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const st = ss.getVideoTracks()[0]; const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); if(sender) sender.replaceTrack(st); else peerRef.current.peerConnection.addTrack(st, localStream); st.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true); } catch(e) {} } };
 
+  // Drag & Drop
   const onDrop = async (e) => {
       e.preventDefault(); setIsDragging(false);
       if(e.dataTransfer.files[0]) {
           const imageFile = e.dataTransfer.files[0];
           let uploadFile = imageFile;
+          // Compress if image
           if(imageFile.type.startsWith('image/')) {
              try { uploadFile = await imageCompression(imageFile, { maxSizeMB: 1, useWebWorker: true }); } catch(e){}
           }
@@ -931,7 +915,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
     const [showSearch, setShowSearch] = useState(false);
     const [ctxMenu, setCtxMenu] = useState(null);
 
-    // FETCH SERVER DATA & MEMBERS PROFILES
+    // FETCH SERVER DATA ON MOUNT (FIX HISTORY)
     useEffect(() => {
         if(serverId) {
             axios.get(`${SERVER_URL}/api/server/${serverId}`).then(res => {
