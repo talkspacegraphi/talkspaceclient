@@ -8,7 +8,6 @@ const log = require('electron-log');
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
 
-// --- SQUIRREL SETUP (Важно для корректной установки/удаления/обновления) ---
 if (require('electron-squirrel-startup')) return app.quit();
 
 let mainWindow;
@@ -16,7 +15,6 @@ let splashWindow;
 let tray = null;
 let isQuitting = false;
 
-// SINGLE INSTANCE LOCK
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
@@ -46,11 +44,9 @@ if (!gotTheLock) {
     createSplashWindow();
     
     if (app.isPackaged) {
-        // Проверяем обновления через 3 секунды после запуска
         setTimeout(() => {
             autoUpdater.checkForUpdates();
         }, 3000);
-        // И далее каждые 10 минут
         setInterval(() => autoUpdater.checkForUpdates(), 1000 * 60 * 10); 
     } else {
         setTimeout(createMainWindow, 1500);
@@ -115,10 +111,17 @@ function createTray() {
   const image = nativeImage.createFromPath(getIconPath());
   tray = new Tray(image);
   tray.setToolTip('TalkSpace');
+  
+  // Custom Tray Menu
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Открыть TalkSpace', click: () => { if(mainWindow) mainWindow.show(); } },
+    { label: 'TalkSpace', enabled: false }, // Неактивный текст
     { type: 'separator' },
-    { label: 'Выход', click: () => { isQuitting = true; app.quit(); }}
+    { label: 'Check for updates', click: () => { 
+        if(app.isPackaged) autoUpdater.checkForUpdates();
+        if(mainWindow) mainWindow.show(); 
+    }},
+    { type: 'separator' },
+    { label: 'Quit TalkSpace', click: () => { isQuitting = true; app.quit(); }}
   ]);
   tray.setContextMenu(contextMenu);
   tray.on('click', () => { if (mainWindow) mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show(); });
@@ -133,7 +136,6 @@ ipcMain.on('flash-frame', () => { if(mainWindow && !mainWindow.isFocused()) main
 
 ipcMain.on('restart_app', () => { isQuitting = true; autoUpdater.quitAndInstall(); });
 
-// Ручная проверка обновлений из настроек
 ipcMain.on('check-for-updates-manual', () => {
     if(app.isPackaged) {
         autoUpdater.checkForUpdates();
@@ -145,24 +147,27 @@ ipcMain.on('toggle-auto-launch', (event, enable) => { app.setLoginItemSettings({
 
 function sendStatusToSplash(text) { if (splashWindow) splashWindow.webContents.send('message', text); }
 
-// --- AUTO UPDATER EVENTS ---
 autoUpdater.on('checking-for-update', () => {
     sendStatusToSplash('Checking...');
     log.info('Checking for update...');
+    if(mainWindow) mainWindow.webContents.send('update_status', {status: 'checking'});
 });
 autoUpdater.on('update-available', (info) => {
     sendStatusToSplash('Update found...');
     log.info('Update available:', info);
     if(mainWindow) mainWindow.webContents.send('update_available_info', info.version);
+    if(mainWindow) mainWindow.webContents.send('update_status', {status: 'available', version: info.version});
 });
 autoUpdater.on('update-not-available', () => {
     sendStatusToSplash('Starting...');
     log.info('Update not available.');
+    if(mainWindow) mainWindow.webContents.send('update_status', {status: 'latest'});
     if(!mainWindow) setTimeout(createMainWindow, 1000);
 });
 autoUpdater.on('error', (err) => {
     sendStatusToSplash('Ready');
     log.error('Update error:', err);
+    if(mainWindow) mainWindow.webContents.send('update_status', {status: 'error'});
     if(!mainWindow) setTimeout(createMainWindow, 1000);
 });
 autoUpdater.on('download-progress', (p) => {

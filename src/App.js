@@ -1,4 +1,3 @@
-javascript
 import React, { useState, useEffect, useRef, useCallback, createContext } from 'react';
 import { HashRouter as Router, Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -19,7 +18,7 @@ import {
   Trash, LogOut as LeaveIcon, Link as LinkIcon, Maximize, Minimize, 
   AlertCircle, ChevronDown, ChevronUp, Paperclip, Edit2, Volume2, Crown, 
   DownloadCloud, RefreshCw, Power, Pin, Music, Keyboard, Search, File, Play, Pause, StopCircle, Copy, MoreVertical,
-  ArrowUpCircle, Loader2
+  ArrowUpCircle, Loader2, Headphones, HeadphonesOff
 } from 'lucide-react';
 
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
@@ -68,6 +67,22 @@ const GlobalStyles = () => (
         .drag-overlay { background: rgba(88, 101, 242, 0.2); border: 2px dashed #5865F2; backdrop-filter: blur(2px); }
         .mention { background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 2px; border-radius: 3px; font-weight: 500; cursor: pointer; }
         .mention:hover { background: rgba(88, 101, 242, 0.6); }
+        .hover-tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #000;
+            color: #fff;
+            padding: 4px 8px;
+            font-size: 10px;
+            border-radius: 4px;
+            white-space: nowrap;
+            margin-bottom: 5px;
+            z-index: 50;
+            pointer-events: none;
+        }
     `}</style>
 );
 
@@ -189,56 +204,7 @@ function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localS
     )
 }
 
-// --- MAIN UI COMPONENTS ---
-
-function TitleBar() {
-  if (!ipcRenderer) return null;
-  return (
-    <div className="h-8 bg-[#000] flex items-center justify-between select-none w-full border-b border-white/10 z-[9999] fixed top-0 left-0 right-0 drag-region">
-       <div className="flex items-center gap-2 px-3 no-drag">
-           <div className="w-3 h-3 bg-[var(--primary)] rounded-full flex items-center justify-center font-black text-[6px] text-white">T</div>
-           <span className="text-[10px] font-black text-gray-500 tracking-[0.2em] uppercase">TalkSpace</span>
-       </div>
-       <div className="flex h-full no-drag">
-           <button onClick={() => ipcRenderer.send('app-minimize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Minus size={14} /></button>
-           <button onClick={() => ipcRenderer.send('app-maximize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Square size={12} /></button>
-           <button onClick={() => ipcRenderer.send('app-close')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-red-500 hover:text-white transition-colors"><X size={14} /></button>
-       </div>
-       <style>{`.drag-region { -webkit-app-region: drag; } .no-drag { -webkit-app-region: no-drag; }`}</style>
-    </div>
-  );
-}
-
-function LoadingScreen() {
-    const [fact, setFact] = useState(LOADING_FACTS[0]);
-    useEffect(() => { setFact(LOADING_FACTS[Math.floor(Math.random() * LOADING_FACTS.length)]); }, []);
-    return (
-        <div className="fixed inset-0 bg-[#000] z-[9999] flex flex-col items-center justify-center text-center p-4">
-            <GlobalStyles />
-            <motion.div animate={{ rotate: 360, scale: [1, 1.2, 1] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }} className="w-20 h-20 bg-[var(--primary)] rounded-full mb-8 flex items-center justify-center shadow-[0_0_50px_rgba(88,101,242,0.8)]"><div className="text-white font-black text-3xl">T</div></motion.div>
-            <h2 className="text-white font-bold text-lg mb-2 uppercase tracking-widest">TalkSpace</h2>
-            <p className="text-gray-500 text-xs tracking-widest animate-pulse mb-6">ESTABLISHING CONNECTION</p>
-            <p className="text-gray-600 text-xs mt-8 max-w-md">💡 {fact}</p>
-        </div>
-    )
-}
-
-function UpdateNotification({ onRestart }) {
-    return (
-        <motion.div initial={{y: 50, opacity: 0}} animate={{y: 0, opacity: 1}} className="absolute bottom-6 left-20 z-[9999] bg-green-600/90 backdrop-blur-md p-3 rounded-xl shadow-2xl border border-green-400 w-64">
-            <div className="flex items-start gap-3">
-                <div className="p-2 bg-white/20 rounded-full"><DownloadCloud size={20} className="text-white"/></div>
-                <div>
-                    <h4 className="font-bold text-white text-sm">Обновление готово!</h4>
-                    <p className="text-[11px] text-green-100 leading-tight my-1">Новая версия загружена.</p>
-                    <button onClick={onRestart} className="mt-2 bg-white text-green-700 w-full py-1.5 rounded-lg text-xs font-black uppercase hover:bg-green-50 transition-colors flex items-center justify-center gap-2"><RefreshCw size={12}/> Перезапустить</button>
-                </div>
-            </div>
-        </motion.div>
-    );
-}
-
-// --- APP COMPONENT ---
+// --- MAIN APP ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token') || null);
@@ -251,9 +217,14 @@ export default function App() {
       document.documentElement.style.setProperty('--primary', primaryColor);
       
       if (ipcRenderer) {
+          ipcRenderer.on('update_status', (event, data) => setUpdateInfo({ status: data.status, version: data.version }));
           ipcRenderer.on('update_available_info', (event, version) => setUpdateInfo({ status: 'available', version }));
           ipcRenderer.on('update_downloaded', () => { setUpdateReady(true); setUpdateInfo({ status: 'downloaded', version: '' }); });
       }
+      
+      socket.on('profile_updated', (data) => {
+          if(user && data.userId === user._id) setUser(data.user);
+      });
       
       socket.on('sound_played', (sound) => {
           new Audio(`./sounds/${sound}.mp3`).play().catch(e => console.log("Sound error", e));
@@ -263,7 +234,7 @@ export default function App() {
           try {
               const res = await axios.get(`${SERVER_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
               setUser(res.data);
-              setTimeout(() => setLoading(false), 1500); 
+              setTimeout(() => setLoading(false), 1000); 
           } catch (e) {
               localStorage.clear(); setToken(null); setUser(null); setLoading(false);
           }
@@ -274,7 +245,7 @@ export default function App() {
 
   const handleAuth = (data) => {
     localStorage.setItem('token', data.token); setToken(data.token); setUser(data.user); setLoading(true);
-    setTimeout(() => setLoading(false), 2000);
+    setTimeout(() => setLoading(false), 1500);
   };
   const logout = () => { localStorage.clear(); setToken(null); setUser(null); };
   const restartApp = () => { if (ipcRenderer) ipcRenderer.send('restart_app'); };
@@ -312,6 +283,10 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
   const [pttEnabled, setPttEnabled] = useState(localStorage.getItem('pttEnabled') === 'true');
   const [selectedMic, setSelectedMic] = useState(localStorage.getItem('selectedMic') || '');
   const [selectedCam, setSelectedCam] = useState(localStorage.getItem('selectedCam') || '');
+  
+  // Status Bar Audio Controls
+  const [micMuted, setMicMuted] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -368,9 +343,9 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
       {/* 2. SIDEBAR */}
       <div className="w-60 bg-[#111] flex flex-col shrink-0 z-20 border-r border-white/5">
          <Routes>
-             <Route path="/friends" element={<DMSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
-             <Route path="/chat/*" element={<DMSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
-             <Route path="/server/:serverId" element={<ServerSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
+             <Route path="/friends" element={<DMSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} micMuted={micMuted} setMicMuted={setMicMuted} soundMuted={soundMuted} setSoundMuted={setSoundMuted}/>} />
+             <Route path="/chat/*" element={<DMSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} micMuted={micMuted} setMicMuted={setMicMuted} soundMuted={soundMuted} setSoundMuted={setSoundMuted}/>} />
+             <Route path="/server/:serverId" element={<ServerSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} micMuted={micMuted} setMicMuted={setMicMuted} soundMuted={soundMuted} setSoundMuted={setSoundMuted}/>} />
          </Routes>
       </div>
 
@@ -384,17 +359,8 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
         </Routes>
       </div>
 
-      {contextMenu && (
-          <div style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed bg-[#111] border border-white/10 rounded-[4px] shadow-2xl z-[300] py-1 w-48 font-medium">
-              <button onClick={inviteServer} className="w-full text-left px-2 py-1.5 text-[#B5BAC1] hover:bg-[#5865F2] hover:text-white text-xs flex items-center gap-2 transition-colors"><LinkIcon size={14}/> Пригласить</button>
-              <div className="h-[1px] bg-white/10 my-1"/>
-              {contextMenu.ownerId === user._id ? (
-                  <button onClick={deleteServer} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><Trash size={14}/> Удалить</button>
-              ) : (
-                  <button onClick={leaveServer} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white text-xs flex items-center gap-2 transition-colors"><LeaveIcon size={14}/> Покинуть</button>
-              )}
-          </div>
-      )}
+      {/* GLOBAL CONTEXT MENU */}
+      {contextMenu && <GlobalContextMenu menu={contextMenu} user={user} refresh={refresh} navigate={navigate} close={()=>setContextMenu(null)} />}
 
       <AnimatePresence>
         {showSettings && <SettingsModal user={user} setUser={setUser} onClose={() => setShowSettings(false)} onLogout={onLogout} noise={noiseSuppression} setNoise={setNoiseSuppression} ptt={pttEnabled} setPtt={setPttEnabled} pttKey={pttKey} setPttKey={setPttKey} selectedMic={selectedMic} setSelectedMic={setSelectedMic} selectedCam={selectedCam} setSelectedCam={setSelectedCam} updateInfo={updateInfo} setUpdateInfo={setUpdateInfo} />}
@@ -405,7 +371,7 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
 }
 
 // --- SIDEBAR COMPONENTS ---
-const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
+const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu, updateStatus, micMuted, setMicMuted, soundMuted, setSoundMuted }) => (
     <>
         <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm select-none bg-[#111] text-sm">Поиск...</div>
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto custom-scrollbar">
@@ -426,17 +392,15 @@ const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu,
             );
           }) : (
               <div className="px-3">
-                  <Skeleton className="h-10 w-full mb-1"/>
-                  <Skeleton className="h-10 w-full mb-1"/>
-                  <Skeleton className="h-10 w-full mb-1"/>
+                  <div className="p-4 text-center text-xs text-gray-500 font-bold">Нет чатов</div>
               </div>
           )}
         </div>
-        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} />
+        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} micMuted={micMuted} setMicMuted={setMicMuted} soundMuted={soundMuted} setSoundMuted={setSoundMuted}/>
     </>
 );
 
-const ServerSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => {
+const ServerSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu, updateStatus, micMuted, setMicMuted, soundMuted, setSoundMuted }) => {
     const { serverId } = useParams();
     const activeServer = user?.servers?.find(s => s._id === serverId);
     return (
@@ -450,13 +414,13 @@ const ServerSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusM
                 </div>
             ))}
         </div>
-        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} />
+        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} micMuted={micMuted} setMicMuted={setMicMuted} soundMuted={soundMuted} setSoundMuted={setSoundMuted}/>
     </>
     );
 };
 
-const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
-    <div className="bg-[#050505] p-1.5 relative select-none flex items-center gap-1 border-t border-white/5">
+const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateStatus, micMuted, setMicMuted, soundMuted, setSoundMuted }) => (
+    <div className="bg-[#0B0C0E] p-1.5 relative select-none flex items-center gap-1 border-t border-white/5">
        <AnimatePresence>
         {statusMenu && (
           <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: -10, opacity: 1 }} exit={{ opacity: 0 }} className="absolute bottom-full left-2 w-56 bg-[#111] border border-white/10 rounded-lg p-2 shadow-2xl z-50 mb-2">
@@ -466,12 +430,31 @@ const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateSta
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="flex items-center gap-2 p-1 rounded hover:bg-[#222] cursor-pointer transition-colors flex-1" onClick={(e) => {if(!e.target.closest('.icons')) setStatusMenu(!statusMenu)}}>
+      <div className="flex items-center gap-2 p-1 rounded hover:bg-[#222] cursor-pointer transition-colors flex-1 group" onClick={(e) => {if(!e.target.closest('.icons')) setStatusMenu(!statusMenu)}}>
           <div className="relative"><img src={user?.avatar} className="w-8 h-8 rounded-full object-cover bg-zinc-800" alt="me" /><StatusDot status={user.status} /></div>
-          <div className="flex-1 overflow-hidden leading-tight"><p className="text-xs font-bold text-white truncate">{user?.displayName}</p><p className="text-[11px] text-[#DBDEE1]">@{user?.username}</p></div>
+          <div className="flex-1 overflow-hidden leading-tight relative h-8">
+              <div className="absolute top-0 left-0 transition-all duration-300 group-hover:-top-8">
+                  <p className="text-xs font-bold text-white truncate">{user?.displayName}</p>
+                  <p className="text-[11px] text-[#DBDEE1]">{user?.status}</p>
+              </div>
+              <div className="absolute top-8 left-0 transition-all duration-300 group-hover:top-1.5">
+                  <p className="text-xs font-bold text-white">@{user?.username}</p>
+              </div>
+          </div>
       </div>
-      <div className="flex gap-0 icons">
-        <button className="p-2 hover:bg-[#222] rounded text-gray-200" onClick={()=>setShowSettings(true)}><Settings size={18}/></button>
+      <div className="flex gap-1 icons">
+        <button className={`p-1.5 hover:bg-[#222] rounded relative group ${micMuted ? 'text-red-500' : 'text-gray-200'}`} onClick={()=>setMicMuted(!micMuted)}>
+            {micMuted ? <MicOff size={18}/> : <Mic size={18}/>}
+            <span className="hover-tooltip" data-tooltip={micMuted ? "Включить микрофон" : "Выключить микрофон"}></span>
+        </button>
+        <button className={`p-1.5 hover:bg-[#222] rounded relative group ${soundMuted ? 'text-red-500' : 'text-gray-200'}`} onClick={()=>setSoundMuted(!soundMuted)}>
+            {soundMuted ? <HeadphonesOff size={18}/> : <Headphones size={18}/>}
+            <span className="hover-tooltip" data-tooltip={soundMuted ? "Включить звук" : "Выключить звук"}></span>
+        </button>
+        <button className="p-1.5 hover:bg-[#222] rounded text-gray-200 relative group" onClick={()=>setShowSettings(true)}>
+            <Settings size={18}/>
+            <span className="hover-tooltip" data-tooltip="Настройки"></span>
+        </button>
       </div>
     </div>
 );
@@ -493,10 +476,10 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
     const pinMsg = () => { extra.onPin(data._id, !data.isPinned); close(); };
 
     return (
-        <div style={{ top: y, left: x }} className="fixed bg-[#111] border border-white/10 rounded-[4px] shadow-2xl z-[9999] py-1 w-52 font-medium text-xs text-gray-300" onMouseLeave={close}>
+        <div style={{ top: y, left: x }} className="fixed bg-[#111] border border-black/50 rounded-[4px] shadow-[0_8px_16px_rgba(0,0,0,0.5)] z-[9999] py-1.5 w-56 font-medium text-xs text-gray-300" onMouseLeave={close}>
             {type === 'server' && (
                 <>
-                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить</button>
+                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить людей</button>
                     <div className="h-[1px] bg-white/10 my-1"/>
                     {data.owner === user._id ? (
                         <button onClick={deleteS} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сервер</button>
@@ -510,14 +493,14 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
                     <button onClick={replyMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Reply size={14}/> Ответить</button>
                     <button onClick={copyText} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Copy size={14}/> Копировать текст</button>
                     <button onClick={pinMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Pin size={14}/> {data.isPinned ? 'Открепить' : 'Закрепить'}</button>
+                    <div className="h-[1px] bg-white/10 my-1"/>
                     {data.senderId === user._id && (
                         <>
-                            <button onClick={editMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Edit2 size={14}/> Изменить</button>
+                            <button onClick={editMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Edit2 size={14}/> Редактировать сообщение</button>
+                            <button onClick={deleteMsg} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сообщение</button>
                             <div className="h-[1px] bg-white/10 my-1"/>
-                            <button onClick={deleteMsg} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить</button>
                         </>
                     )}
-                    <div className="h-[1px] bg-white/10 my-1"/>
                     <button onClick={copyId} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2">Копировать ID</button>
                 </>
             )}
@@ -530,6 +513,8 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
 function ChatInput({ onSend, onUpload, placeholder, members = [], onType }) {
     const [text, setText] = useState("");
     const [showEmoji, setShowEmoji] = useState(false);
+    const [mentionSearch, setMentionSearch] = useState(null);
+    const [mentionIndex, setMentionIndex] = useState(0);
     
     // Throttled typing emit
     const lastTypeTime = useRef(0);
@@ -540,9 +525,30 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], onType }) {
             onType && onType();
             lastTypeTime.current = now;
         }
+
+        const lastWord = e.target.value.split(" ").pop();
+        if (lastWord.startsWith("@")) {
+            setMentionSearch(lastWord.slice(1));
+        } else {
+            setMentionSearch(null);
+        }
+    };
+
+    const insertMention = (user) => {
+        const words = text.split(" "); 
+        words.pop();
+        setText(words.join(" ") + (words.length > 0 ? " " : "") + `@${user.username} `);
+        setMentionSearch(null);
     };
 
     const handleKeyDown = (e) => {
+        if (mentionSearch !== null) {
+            const filtered = members.filter(m => m.username.toLowerCase().includes(mentionSearch.toLowerCase()));
+            if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(prev => (prev + 1) % filtered.length); return; }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(prev => (prev - 1 + filtered.length) % filtered.length); return; }
+            else if (e.key === 'Enter') { e.preventDefault(); insertMention(filtered[mentionIndex]); return; }
+            else if (e.key === 'Escape') { setMentionSearch(null); return; }
+        }
         if (e.key === 'Enter' && !e.shiftKey) { 
             e.preventDefault(); 
             if(text.trim()) { onSend(text); setText(""); }
@@ -565,6 +571,18 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], onType }) {
     return (
         <div className="p-4 bg-[#0B0B0C] shrink-0 z-20 relative px-4 pb-6">
             {showEmoji && <div className="absolute bottom-20 right-4 z-50"><EmojiPicker theme="dark" onEmojiClick={(e)=>setText(prev=>prev+e.emoji)}/></div>}
+            
+            {mentionSearch !== null && members.length > 0 && (
+                <div className="absolute bottom-20 left-4 bg-[#111] border border-white/10 rounded-lg shadow-2xl w-64 max-h-48 overflow-y-auto custom-scrollbar z-50">
+                    {members.filter(m => m.username.toLowerCase().includes(mentionSearch.toLowerCase())).map((m, i) => (
+                        <div key={m._id} onClick={() => insertMention(m)} className={`p-2 flex items-center gap-2 cursor-pointer hover:bg-[var(--primary)] ${i === mentionIndex ? 'bg-[#222]' : ''}`}>
+                            <img src={m.avatar} className="w-6 h-6 rounded-full" alt="av"/>
+                            <div><p className="text-white text-xs font-bold">{m.displayName}</p><p className="text-gray-400 text-[10px]">@{m.username}</p></div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <div className="flex items-center gap-3 bg-[#111] p-2.5 px-4 rounded-lg border border-white/5 focus-within:border-white/20 transition-colors">
                 <label className="cursor-pointer text-[#B5BAC1] hover:text-[#DBDEE1] p-1"><Plus size={20} className="bg-[#2B2D31] rounded-full p-0.5"/><input type="file" hidden onChange={handleFile}/></label>
                 <input value={text} onChange={handleChange} onKeyDown={handleKeyDown} className="flex-1 bg-transparent outline-none text-[#DBDEE1] text-[15px] py-1 placeholder:text-[#555]" placeholder={placeholder} />
@@ -595,11 +613,9 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                     const isNew = (new Date() - new Date(m.createdAt)) < 5 * 60 * 1000 && !isMe;
 
                     return (
-                        <div 
-                            className="px-4 py-0.5 hover:bg-[#111]/50 relative group pr-16" 
-                            onContextMenu={(e)=>{e.preventDefault(); onContextMenu(e, m)}}
-                        >
+                        <div className="px-4 py-0.5 hover:bg-[#111]/50 relative group pr-16" onContextMenu={(e)=>{e.preventDefault(); onContextMenu(e, m)}}>
                              {isNew && showHeader && <div className="flex items-center my-2"><div className="h-[1px] bg-red-500 flex-1"/><span className="text-[10px] text-red-500 font-bold px-2 uppercase">New</span><div className="h-[1px] bg-red-500 flex-1"/></div>}
+                             
                              <div className={`flex gap-4 ${!showHeader ? 'mt-0' : 'mt-4'}`}>
                                  {showHeader ? (
                                      <img src={m.senderAvatar} className="w-10 h-10 rounded-full bg-zinc-800 object-cover cursor-pointer hover:opacity-80" alt="av" />
@@ -608,6 +624,7 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                          {new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                                      </div>
                                  )}
+
                                  <div className="flex-1 min-w-0">
                                      {showHeader && (
                                          <div className="flex items-center gap-2 mb-0.5">
@@ -616,6 +633,7 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                              {m.isPinned && <Pin size={12} className="text-red-400 rotate-45" />}
                                          </div>
                                      )}
+                                     
                                      {m.replyTo && showHeader && (
                                         <div className="flex items-center gap-1 opacity-60 text-xs mb-1">
                                             <div className="w-4 h-2 border-t-2 border-l-2 border-gray-500 rounded-tl-md"/>
@@ -623,6 +641,7 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                             <span className="text-gray-500 truncate max-w-[200px]">{m.replyTo.text}</span>
                                         </div>
                                      )}
+
                                      <div className="text-[#DBDEE1]">
                                          {m.type === 'image' ? (
                                              <img onClick={()=>setLightboxImage(m.fileUrl)} src={m.fileUrl} className="max-w-[300px] max-h-[300px] rounded-lg shadow-lg border border-white/5 cursor-zoom-in" alt="attachment"/>
@@ -633,18 +652,38 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                              </div>
                                          ) : (
                                              <div className="text-[15px] leading-relaxed break-words markdown-body">
-                                                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ code({node, inline, className, children, ...props}) { const match = /language-(\w+)/.exec(className || ''); return !inline && match ? ( <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter> ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>) } }}>{m.text}</ReactMarkdown>
+                                                 {m.ogData ? (
+                                                     <>
+                                                        <a href={m.ogData.url} target="_blank" rel="noopener noreferrer" className="text-[#00A8FC] hover:underline block mb-1">{m.text || m.ogData.url}</a>
+                                                        <div className="mt-2 border-l-4 border-[#2B2D31] bg-[#1E1F22] rounded max-w-md overflow-hidden">
+                                                            <div className="p-3">
+                                                                <h4 className="font-bold text-blue-400 text-sm hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
+                                                                <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
+                                                            </div>
+                                                            {m.ogData.image && <img src={m.ogData.image} className="w-full h-auto object-cover max-h-60" alt="preview"/>}
+                                                        </div>
+                                                     </>
+                                                 ) : (
+                                                    <ReactMarkdown 
+                                                        remarkPlugins={[remarkGfm]} 
+                                                        components={{
+                                                            code({node, inline, className, children, ...props}) {
+                                                                const match = /language-(\w+)/.exec(className || '')
+                                                                return !inline && match ? (
+                                                                <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter>
+                                                                ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>)
+                                                            },
+                                                            p: ({children}) => <p>{children}</p> 
+                                                        }}
+                                                    >
+                                                        {m.text}
+                                                    </ReactMarkdown>
+                                                 )}
                                                  {m.isEdited && <span className="text-[10px] text-gray-500 ml-1">(изм.)</span>}
                                              </div>
                                          )}
                                      </div>
-                                     {m.ogData && (
-                                         <div className="mt-2 border-l-4 border-[var(--primary)] bg-[#1E1F22] rounded p-2 max-w-md">
-                                             <h4 className="font-bold text-[#00A8FC] hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
-                                             <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
-                                             {m.ogData.image && <img src={m.ogData.image} className="mt-2 rounded max-h-40 object-cover w-full" alt="preview"/>}
-                                         </div>
-                                     )}
+
                                      {m.reactions?.length > 0 && (
                                          <div className="flex gap-1 mt-1 flex-wrap">
                                              {m.reactions.map((r, i) => (
@@ -656,11 +695,19 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                      )}
                                  </div>
                              </div>
-                             {/* Hover Actions (Only Reply & React) */}
-                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-sm p-1 rounded border border-white/10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1 hover:bg-[#404249] rounded">👍</button>
-                                 <button onClick={()=>onReact(m._id, '🔥')} className="p-1 hover:bg-[#404249] rounded">🔥</button>
-                                 <button onClick={()=>onReply(m)} className="p-1 hover:bg-[#404249] rounded text-gray-400 hover:text-white" title="Ответить"><Reply size={16}/></button>
+
+                             {/* Modern Hover Actions */}
+                             <div className="absolute -top-2 right-4 bg-[#313338] shadow-[0_2px_4px_rgba(0,0,0,0.2)] p-1 rounded border border-[#2B2D31] flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                                 <button onClick={()=>onReact(m._id, '❤️')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Нравится">❤️</button>
+                                 <button onClick={()=>onReact(m._id, '😂')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Смешно">😂</button>
+                                 <button onClick={()=>onReact(m._id, '👍')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Супер">👍</button>
+                                 
+                                 <div className="w-[1px] h-4 bg-white/10 mx-1"/>
+                                 
+                                 <button onClick={()=>onReact(m._id, '➕')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Добавить реакцию"><Smile size={18}/></button>
+                                 <button onClick={()=>onReply(m)} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Ответить"><Reply size={18}/></button>
+                                 <button className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Переслать"><ArrowUpCircle size={18}/></button>
+                                 <button onClick={(e)=>onContextMenu(e, m)} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-gray-400 hover:text-white hover-tooltip" data-tooltip="Ещё"><MoreVertical size={18}/></button>
                              </div>
                         </div>
                     )
@@ -691,8 +738,6 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  
-  // Context Menu State
   const [ctxMenu, setCtxMenu] = useState(null);
   
   const friend = activeChat?.members?.find(m => m._id !== user._id);
@@ -710,7 +755,6 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
     socket.on('message_update', (d) => setMessages(p => p.map(m => m._id === d.msg._id ? d.msg : m)));
     socket.on('message_delete', (d) => setMessages(p => p.filter(m => m._id !== d.msgId)));
     
-    // Typing
     socket.on('user_typing', (u) => setTyping(p => [...new Set([...p, u])]));
     socket.on('user_stop_typing', (u) => setTyping(p => p.filter(n => n !== u)));
 
@@ -730,11 +774,9 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
   const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { chatId: activeChat._id, msgId, isPinned });
 
-  const typingTimeout = useRef();
   const handleType = () => {
       socket.emit('typing', { room: activeChat._id, user: user.displayName });
-      clearTimeout(typingTimeout.current);
-      typingTimeout.current = setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
+      setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
   };
 
   const startCall = async (withVideo) => {
@@ -767,11 +809,41 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
       callSound.pause(); callSound.currentTime = 0;
       setCallActive(false); setLocalStream(null); setRemoteStream(null); setIsIncoming(null); setIsScreenOn(false); setFullScreen(false);
   };
-  const toggleMic = () => { if(localStream) { const track = localStream.getAudioTracks()[0]; if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } } };
-  const toggleCam = async () => { if (isCamOn) { localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); } else { try { const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); const vt = vs.getVideoTracks()[0]; localStream.addTrack(vt); const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); if (sender) sender.replaceTrack(vt); else peerRef.current.peerConnection.addTrack(vt, localStream); setIsCamOn(true); } catch(e) { alert("Камера не найдена"); } } };
-  const shareScreen = async () => { if(!isScreenOn) { try { const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); const st = ss.getVideoTracks()[0]; const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); if(sender) sender.replaceTrack(st); else peerRef.current.peerConnection.addTrack(st, localStream); st.onended = () => { setIsScreenOn(false); }; setIsScreenOn(true); } catch(e) {} } };
+  const toggleMic = () => { 
+      if(localStream) { 
+          const track = localStream.getAudioTracks()[0]; 
+          if(track) { track.enabled = !track.enabled; setIsMicOn(track.enabled); } 
+      } 
+  };
+  const toggleCam = async () => { 
+      if (isCamOn) { 
+          localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); }); setIsCamOn(false); 
+      } else { 
+          try { 
+              const vs = await navigator.mediaDevices.getUserMedia({ video: { deviceId: selectedCam ? { exact: selectedCam } : undefined } }); 
+              const vt = vs.getVideoTracks()[0]; 
+              localStream.addTrack(vt); 
+              const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video'); 
+              if (sender) sender.replaceTrack(vt); 
+              else peerRef.current.peerConnection.addTrack(vt, localStream); 
+              setIsCamOn(true); 
+          } catch(e) { alert("Камера не найдена"); } 
+      } 
+  };
+  const shareScreen = async () => { 
+      if(!isScreenOn) { 
+          try { 
+              const ss = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }); 
+              const st = ss.getVideoTracks()[0]; 
+              const sender = peerRef.current.peerConnection.getSenders().find(s => s.track.kind === 'video' || s.track.kind === 'screen'); 
+              if(sender) sender.replaceTrack(st); 
+              else peerRef.current.peerConnection.addTrack(st, localStream); 
+              st.onended = () => { setIsScreenOn(false); }; 
+              setIsScreenOn(true); 
+          } catch(e) {} 
+      } 
+  };
 
-  // Drag & Drop
   const onDrop = async (e) => {
       e.preventDefault(); setIsDragging(false);
       if(e.dataTransfer.files[0]) {
@@ -822,7 +894,12 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
       
       <MessageList messages={filteredMessages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} onContextMenu={handleContextMenu} />
       
-      {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
+      {typing.length > 0 && <div className="absolute bottom-24 left-4 text-[12px] font-bold text-white animate-pulse flex items-center gap-1">
+            <span className="w-2 h-2 bg-white rounded-full animate-bounce"/>
+            <span className="w-2 h-2 bg-white rounded-full animate-bounce delay-75"/>
+            <span className="w-2 h-2 bg-white rounded-full animate-bounce delay-150"/>
+            <span className="ml-1">{typing[0]} печатает...</span>
+      </div>}
       
       {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
       
@@ -854,7 +931,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
     const [showSearch, setShowSearch] = useState(false);
     const [ctxMenu, setCtxMenu] = useState(null);
 
-    // FETCH SERVER DATA ON MOUNT (FIX HISTORY)
+    // FETCH SERVER DATA & MEMBERS PROFILES
     useEffect(() => {
         if(serverId) {
             axios.get(`${SERVER_URL}/api/server/${serverId}`).then(res => {
@@ -1001,7 +1078,14 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
                         </AnimatePresence>
 
                         <MessageList messages={filteredMessages} user={user} onReact={handleReact} setEditMsg={setEditMsg} onDelete={handleDelete} onPin={handlePin} onReply={setReplyTo} onContextMenu={handleContextMenu} />
-                        {typing.length > 0 && <div className="px-4 text-[10px] font-bold text-gray-400 animate-pulse">{typing.join(', ')} печатает...</div>}
+                        
+                        {typing.length > 0 && <div className="absolute bottom-24 left-4 text-[12px] font-bold text-white animate-pulse flex items-center gap-1">
+                                <span className="w-2 h-2 bg-white rounded-full animate-bounce"/>
+                                <span className="w-2 h-2 bg-white rounded-full animate-bounce delay-75"/>
+                                <span className="w-2 h-2 bg-white rounded-full animate-bounce delay-150"/>
+                                <span className="ml-1">{typing[0]} печатает...</span>
+                        </div>}
+                        
                         {replyTo && <div className="mx-4 mb-0 bg-[#2B2D31] p-2 rounded-t flex justify-between items-center text-xs text-gray-300 border-l-4 border-[var(--primary)]"><span>Ответ <b>{replyTo.senderName}</b>: {replyTo.text.substring(0,50)}...</span><X size={14} className="cursor-pointer" onClick={()=>setReplyTo(null)}/></div>}
                         <ChatInput onSend={handleSend} onUpload={handleUpload} onType={handleType} placeholder={`Написать в #${channel.name}`} members={server?.members || []} roomId={serverId} />
                         
