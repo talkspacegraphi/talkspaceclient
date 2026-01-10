@@ -836,14 +836,14 @@ function Auth({ onAuth }) {
                 <Input label="E-mail" required value={regData.email} onChange={e=>setRegData({...regData, email:e.target.value})}/>
                 <Input label="Отображаемое имя" value={regData.displayName} onChange={e=>setRegData({...regData, displayName:e.target.value})}/>
                 <div className="mb-4">
-                    <label className={`block text-[10px] font-black uppercase mb-2 ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>Имя пользователя <span className="text-red-400">*</span></label>
+                    <label className={`block text-[11px] font-black uppercase mb-2 ${usernameStatus==='taken'?'text-red-400':'text-gray-400'}`}>Имя пользователя <span className="text-red-400">*</span></label>
                     <input value={regData.username} onChange={e=>setRegData({...regData, username:e.target.value})} className="w-full bg-[#1E1F22] p-3 rounded-xl text-white outline-none text-sm transition-all font-medium" />
                     {usernameStatus === 'free' && <p className="text-green-400 text-xs mt-1 font-bold">Супер! Это имя свободно.</p>}
                     {usernameStatus === 'taken' && <p className="text-red-400 text-xs mt-1 font-bold">Имя занято.</p>}
                 </div>
                 <Input label="Пароль" type="password" required value={regData.password} onChange={e=>setRegData({...regData, password:e.target.value})}/>
                 <div className="mb-6">
-                    <label className="block text-[10px] font-black uppercase text-gray-400 mb-2">Дата рождения <span className="text-red-400">*</span></label>
+                    <label className="block text-[11px] font-black uppercase text-gray-400 mb-2">Дата рождения <span className="text-red-400">*</span></label>
                     <div className="flex gap-3">
                         <div className="w-[30%]"><CustomSelect placeholder="День" value={regData.day} options={[...Array(31)].map((_,i)=>i+1)} onChange={v=>setRegData({...regData, day:v})} /></div>
                         <div className="w-[40%]"><CustomSelect placeholder="Месяц" value={regData.month} options={["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]} onChange={v=>setRegData({...regData, month:v})} /></div>
@@ -858,4 +858,4 @@ function Auth({ onAuth }) {
       </motion.div>
     </div>
   );
-}
+};
