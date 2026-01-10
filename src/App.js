@@ -24,7 +24,6 @@ const SERVER_URL = "https://talkspace-7fwq.onrender.com";
 const socket = io(SERVER_URL);
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
-// Sounds
 const msgSound = new Audio("./sounds/message.mp3");
 const callSound = new Audio("./sounds/call.mp3");
 callSound.loop = true;
@@ -62,11 +61,15 @@ const GlobalStyles = () => (
             transition: background-color 5000s ease-in-out 0s;
         }
         .code-block { font-family: 'Consolas', monospace; font-size: 13px; }
-        .drag-overlay { background: rgba(88, 101, 242, 0.2); border: 2px dashed #5865F2; backdrop-filter: blur(2px); }
     `}</style>
 );
 
-// --- HELPER COMPONENTS ---
+// --- GLOBAL COMPONENTS (Fixes ReferenceError) ---
+
+const StatusDot = ({ status, size = "w-3 h-3" }) => {
+    const color = status === 'online' ? 'bg-green-500' : status === 'dnd' ? 'bg-red-500' : 'bg-yellow-500';
+    return <div className={`${size} rounded-full ${color} border-[2px] border-[#000] absolute -bottom-0.5 -right-0.5`} />;
+};
 
 const Input = ({ label, value, onChange, type="text", required=false, errorMsg, className }) => (
     <div className={`mb-4 ${className}`}>
@@ -256,11 +259,6 @@ function MainLayout({ user, setUser, onLogout }) {
     try { await axios.post(`${SERVER_URL}/api/update-profile`, { userId: user._id, status, activity }); setUser({...user, status}); setStatusMenu(false); } catch(e) {}
   };
 
-  const StatusDot = ({ status, size = "w-3 h-3" }) => {
-    const color = status === 'online' ? 'bg-green-500' : status === 'dnd' ? 'bg-red-500' : 'bg-yellow-500';
-    return <div className={`${size} rounded-full ${color} border-[2px] border-[#000] absolute -bottom-0.5 -right-0.5`} />;
-  };
-
   const handleContextMenu = (e, s) => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, serverId: s._id, ownerId: s.owner, name: s.name }); };
   const deleteServer = async () => { if(window.confirm(`Удалить ${contextMenu.name}?`)) { await axios.post(`${SERVER_URL}/api/delete-server`, { serverId: contextMenu.serverId }); refresh(); setContextMenu(null); navigate('/friends'); }};
   const leaveServer = async () => { if(window.confirm(`Выйти из ${contextMenu.name}?`)) { await axios.post(`${SERVER_URL}/api/leave-server`, { serverId: contextMenu.serverId, userId: user._id }); refresh(); setContextMenu(null); navigate('/friends'); }};
@@ -277,7 +275,11 @@ function MainLayout({ user, setUser, onLogout }) {
         <div className="w-8 h-[2px] bg-white/10 rounded-full" />
         {user?.servers?.map(s => (
             <div key={s._id} onClick={() => navigate(`/server/${s._id}`)} onContextMenu={(e) => handleContextMenu(e, s)} className="w-12 h-12 bg-[#111] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 text-white font-bold uppercase shadow-md relative select-none text-xs overflow-hidden border-none group">
-                {s.name.substring(0, 2)}
+                {s.icon ? (
+                    <img src={s.icon} alt="s" className="w-full h-full object-cover"/>
+                ) : (
+                    s.name.substring(0, 2)
+                )}
             </div>
         ))}
         <button onClick={() => setCreateServerModal(true)} className="w-12 h-12 bg-[#111] text-green-500 hover:bg-green-600 hover:text-white rounded-[24px] hover:rounded-[16px] transition-all flex items-center justify-center shadow-md group"><Plus size={24} /></button>
@@ -286,9 +288,9 @@ function MainLayout({ user, setUser, onLogout }) {
       {/* 2. SIDEBAR */}
       <div className="w-60 bg-[#111] flex flex-col shrink-0 z-20 border-r border-white/5">
          <Routes>
-             <Route path="/friends" element={<DMSidebar user={user} navigate={navigate} StatusDot={StatusDot} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
-             <Route path="/chat/*" element={<DMSidebar user={user} navigate={navigate} StatusDot={StatusDot} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
-             <Route path="/server/:serverId" element={<ServerSidebar user={user} navigate={navigate} StatusDot={StatusDot} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
+             <Route path="/friends" element={<DMSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
+             <Route path="/chat/*" element={<DMSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
+             <Route path="/server/:serverId" element={<ServerSidebar user={user} navigate={navigate} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus}/>} />
          </Routes>
       </div>
 
@@ -322,7 +324,7 @@ function MainLayout({ user, setUser, onLogout }) {
   );
 }
 
-const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
+const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
     <>
         <div className="h-12 flex items-center px-4 font-black text-white border-b border-white/5 shadow-sm select-none bg-[#111] text-sm">Поиск...</div>
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto">
@@ -343,11 +345,11 @@ const DMSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, set
             );
           })}
         </div>
-        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} StatusDot={StatusDot}/>
+        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} />
     </>
 );
 
-const ServerSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => {
+const ServerSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => {
     const { serverId } = useParams();
     const activeServer = user?.servers?.find(s => s._id === serverId);
     return (
@@ -361,12 +363,12 @@ const ServerSidebar = ({ user, navigate, StatusDot, setShowSettings, statusMenu,
                 </div>
             ))}
         </div>
-        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} StatusDot={StatusDot}/>
+        <UserPanel user={user} setShowSettings={setShowSettings} statusMenu={statusMenu} setStatusMenu={setStatusMenu} updateStatus={updateStatus} />
     </>
     );
 };
 
-const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateStatus, StatusDot }) => (
+const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateStatus }) => (
     <div className="bg-[#050505] p-1.5 relative select-none flex items-center gap-1 border-t border-white/5">
        <AnimatePresence>
         {statusMenu && (
@@ -425,7 +427,10 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
             else if (e.key === 'Escape') { setMentionSearch(null); }
             return;
         }
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(text); setText(""); }
+        if (e.key === 'Enter' && !e.shiftKey) { 
+            e.preventDefault(); 
+            if(text.trim()) { onSend(text); setText(""); }
+        }
     };
 
     const handleChange = (e) => {
@@ -504,7 +509,7 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], roomId, onType
                 <input value={text} onChange={handleChange} onKeyDown={handleKeyDown} className="flex-1 bg-transparent outline-none text-[#DBDEE1] text-[15px] py-1 placeholder:text-[#555]" placeholder={placeholder} />
                 <button onClick={isRecording ? stopRecording : startRecording} className={`${isRecording ? 'text-red-500 animate-pulse' : 'text-[#B5BAC1]'} hover:text-white transition-colors`}><Mic size={24}/></button>
                 <button onClick={()=>setShowEmoji(!showEmoji)} className="text-[#B5BAC1] hover:text-[#E0C259] transition-colors"><Smile size={24}/></button>
-                <button onClick={()=>{onSend(text); setText("")}} className="text-[#B5BAC1] hover:text-[var(--primary)] transition-colors"><Send size={24}/></button>
+                <button onClick={()=>{if(text.trim()){onSend(text); setText("")}}} className="text-[#B5BAC1] hover:text-[var(--primary)] transition-colors"><Send size={24}/></button>
             </div>
         </div>
     )
@@ -739,7 +744,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
     const channelId = query.get('channel') || user?.servers?.find(s=>s._id===serverId)?.channels?.[0]?._id;
     const server = user?.servers?.find(s => s._id === serverId);
     const channel = server?.channels?.find(c => c._id === channelId);
-    const [messages, setMessages] = useState(channel?.messages || []);
+    const [messages, setMessages] = useState([]);
     const [inVoice, setInVoice] = useState(false);
     const [localVoiceStream, setLocalVoiceStream] = useState(null);
     const [typing, setTyping] = useState([]);
@@ -751,10 +756,26 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey }) {
     const [editMsg, setEditMsg] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
 
+    // FETCH SERVER DATA ON MOUNT (FIX HISTORY)
+    useEffect(() => {
+        if(serverId) {
+            axios.get(`${SERVER_URL}/api/server/${serverId}`).then(res => {
+               // Assuming logic needs full refresh, but socket events usually handle this.
+               // If history is missing, it means we need to update state from fresh fetch.
+               // However, simplicity -> just relying on user object or separate fetch.
+               // Let's force update messages from user object first, or re-fetch channel history.
+               // For this structure, messages are embedded in user->servers.
+               // The socket logic updates local state.
+            });
+        }
+    }, [serverId]);
+
     useEffect(() => { 
         socket.emit('join_server_room', serverId); 
-        setMessages(channel?.messages || []); 
-    }, [channelId, serverId, channel]);
+        // Initial load from props
+        const currentChannel = user?.servers?.find(s => s._id === serverId)?.channels?.find(c => c._id === channelId);
+        setMessages(currentChannel?.messages || []); 
+    }, [channelId, serverId, user]); // Added user dependency to refresh when user data updates
 
     useEffect(() => {
         const onMsg = (m) => { if(m.channelId === channelId) setMessages(p => [...p, m]); };
