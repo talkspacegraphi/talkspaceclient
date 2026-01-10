@@ -1,7 +1,12 @@
-const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const url = require('url');
+
+// --- SQUIRREL SETUP (DISCORD-STYLE) ---
+// Обрабатывает создание ярлыков при установке/удалении/обновлении
+// Если вернуть true, значит это событие установщика, и мы выходим.
+if (require('electron-squirrel-startup')) return app.quit();
 
 // Логирование обновлений
 autoUpdater.logger = require("electron-log");
@@ -16,20 +21,36 @@ let splashWindow;
 let tray = null;
 let isQuitting = false;
 
+// --- ЗАПРЕТ НА ЗАПУСК ВТОРОГО ОКНА & DEEP LINKING ---
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Если кто-то пытается запустить вторую копию
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
+      
+      const deepLink = commandLine.find((arg) => arg.startsWith('talkspace://'));
+      if (deepLink) {
+          mainWindow.webContents.send('deep-link', deepLink);
+      }
     }
   });
 
   app.whenReady().then(() => {
+    // Регистрация протокола talkspace://
+    if (process.defaultApp) {
+      if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient('talkspace', process.execPath, [path.resolve(process.argv[1])]);
+      }
+    } else {
+      app.setAsDefaultProtocolClient('talkspace');
+    }
+
     session.defaultSession.setPermissionCheckHandler(() => true);
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
       callback(true);
@@ -39,7 +60,7 @@ if (!gotTheLock) {
     
     if (app.isPackaged) {
         autoUpdater.checkForUpdates();
-        // Проверка обновлений каждые 5 минут для "Real-time" эффекта
+        // Проверка обновлений каждые 5 минут
         setInterval(() => {
            autoUpdater.checkForUpdates();
         }, 1000 * 60 * 5); 
@@ -147,6 +168,15 @@ function createTray() {
   });
 }
 
+// Обработка ссылок при холодном старте
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (mainWindow) {
+      mainWindow.webContents.send('deep-link', url);
+  }
+});
+
+// --- IPC HANDLERS ---
 ipcMain.on('app-minimize', () => mainWindow?.minimize());
 ipcMain.on('app-maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
 ipcMain.on('app-close', () => mainWindow?.close());
@@ -155,6 +185,19 @@ ipcMain.on('flash-frame', () => { if(mainWindow && !mainWindow.isFocused()) main
 ipcMain.on('restart_app', () => {
   isQuitting = true;
   autoUpdater.quitAndInstall();
+});
+
+// --- AUTO LAUNCH HANDLERS ---
+ipcMain.on('get-auto-launch-status', (event) => {
+    const settings = app.getLoginItemSettings();
+    event.reply('auto-launch-status', settings.openAtLogin);
+});
+
+ipcMain.on('toggle-auto-launch', (event, enable) => {
+    app.setLoginItemSettings({
+        openAtLogin: enable,
+        path: process.execPath // Это путь к exe файлу
+    });
 });
 
 // --- UPDATER EVENTS ---
@@ -178,7 +221,6 @@ autoUpdater.on('download-progress', (progressObj) => {
 autoUpdater.on('update-downloaded', () => {
   sendStatusToSplash('Update Ready');
   if(mainWindow) {
-      // Отправляем событие в React, чтобы показать баннер
       mainWindow.webContents.send('update_downloaded');
   }
 });

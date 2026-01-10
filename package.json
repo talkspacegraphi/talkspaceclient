@@ -1,6 +1,6 @@
 {
   "name": "talkspace",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": false,
   "main": "electron.js",
   "homepage": "./",
@@ -13,6 +13,7 @@
   "dependencies": {
     "axios": "^1.13.2",
     "electron-log": "^5.4.3",
+    "electron-squirrel-startup": "^1.0.1",
     "electron-updater": "^6.1.8",
     "emoji-picker-react": "^4.9.2",
     "framer-motion": "^12.25.0",
@@ -60,18 +61,21 @@
     },
     "win": {
       "target": [
-        "nsis"
+        "squirrel"
       ],
       "icon": "public/favicon.ico"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "TalkSpace",
-      "deleteAppDataOnUninstall": true
+    "squirrelWindows": {
+      "iconUrl": "https://github.com/talkspacegraphi/talkspaceclient/blob/main/public/favicon.ico?raw=true"
     },
+    "protocols": [
+      {
+        "name": "TalkSpace URL",
+        "schemes": [
+          "talkspace"
+        ]
+      }
+    ],
     "publish": [
       {
         "provider": "github",
