@@ -112,9 +112,9 @@ function createTray() {
   tray = new Tray(image);
   tray.setToolTip('TalkSpace');
   
-  // Custom Tray Menu
+  // Custom Tray Menu (Windows style is limited, but we arrange it as requested)
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'TalkSpace', enabled: false }, // Неактивный текст
+    { label: 'TalkSpace', enabled: false }, // Disabled header
     { type: 'separator' },
     { label: 'Check for updates', click: () => { 
         if(app.isPackaged) autoUpdater.checkForUpdates();
