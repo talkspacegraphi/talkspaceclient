@@ -25,7 +25,6 @@ if (!gotTheLock) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
-      
       const deepLink = commandLine.find((arg) => arg.startsWith('talkspace://'));
       if (deepLink) mainWindow.webContents.send('deep-link', deepLink);
     }
@@ -44,9 +43,7 @@ if (!gotTheLock) {
     createSplashWindow();
     
     if (app.isPackaged) {
-        setTimeout(() => {
-            autoUpdater.checkForUpdates();
-        }, 3000);
+        setTimeout(() => autoUpdater.checkForUpdates(), 3000);
         setInterval(() => autoUpdater.checkForUpdates(), 1000 * 60 * 10); 
     } else {
         setTimeout(createMainWindow, 1500);
@@ -112,15 +109,13 @@ function createTray() {
   tray = new Tray(image);
   tray.setToolTip('TalkSpace');
   
-  // Custom Tray Menu (Windows style is limited, but we arrange it as requested)
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'TalkSpace', enabled: false }, // Disabled header
+    { label: 'TalkSpace', enabled: false }, 
     { type: 'separator' },
     { label: 'Check for updates', click: () => { 
         if(app.isPackaged) autoUpdater.checkForUpdates();
         if(mainWindow) mainWindow.show(); 
     }},
-    { type: 'separator' },
     { label: 'Quit TalkSpace', click: () => { isQuitting = true; app.quit(); }}
   ]);
   tray.setContextMenu(contextMenu);

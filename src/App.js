@@ -6,6 +6,7 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import EmojiPicker from 'emoji-picker-react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { dracula } from 'react-syntax-highlighter/dist/cjs/styles/prism';
@@ -24,7 +25,7 @@ import {
 const { ipcRenderer } = window.require ? window.require('electron') : { ipcRenderer: null };
 
 const SERVER_URL = "https://talkspace-7fwq.onrender.com"; 
-const socket = io(SERVER_URL);
+const socket = io(SERVER_URL, { auth: { token: localStorage.getItem('token') } });
 const PEER_CONFIG = { host: '0.peerjs.com', port: 443, secure: true };
 
 const msgSound = new Audio("./sounds/message.mp3");
@@ -169,67 +170,7 @@ const Skeleton = ({ className }) => (
     <div className={`animate-pulse bg-gray-700/50 rounded ${className}`}/>
 )
 
-// --- CALL HEADER COMPONENT ---
-function CallHeader({ callActive, incoming, onAccept, onReject, onHangup, localStream, remoteStream, toggleMic, toggleCam, shareScreen, isMicOn, isCamOn, isScreenOn, friend, fullScreen, toggleFull }) {
-    if(!callActive && !incoming) return null;
-    return (
-        <div className={`bg-[#000] p-4 flex flex-col items-center justify-center relative z-50 transition-all ${fullScreen ? 'fixed inset-0' : 'min-h-[250px] border-b border-white/5'}`}>
-            {incoming ? (
-                <div className="text-center animate-bounce">
-                    <img src={friend?.avatar} className="w-24 h-24 rounded-full mx-auto mb-6 border-4 border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.6)]" alt="caller"/>
-                    <h3 className="text-2xl font-black text-white mb-8 tracking-wide">Входящий звонок...</h3>
-                    <div className="flex gap-8 justify-center">
-                        <button onClick={onAccept} className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><Phone size={32} className="text-white"/></button>
-                        <button onClick={onReject} className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"><PhoneOff size={32} className="text-white"/></button>
-                    </div>
-                </div>
-            ) : (
-                <div className="w-full h-full flex flex-col">
-                    <div className="flex-1 flex items-center justify-center gap-4 relative overflow-hidden rounded-xl bg-[#111] mb-4 w-full h-full group">
-                        {remoteStream && remoteStream.getVideoTracks().length > 0 ? (
-                            <video autoPlay ref={v => v && (v.srcObject = remoteStream)} className="w-full h-full object-contain" />
-                        ) : (
-                            <div className="flex flex-col items-center"><img src={friend?.avatar} className="w-24 h-24 rounded-full mb-4 animate-pulse" alt="friend"/><p className="text-gray-400 font-bold">Звонок идет...</p></div>
-                        )}
-                        
-                        <div className="absolute bottom-4 right-4 w-48 h-36 bg-black rounded-lg border border-white/10 overflow-hidden shadow-2xl z-20">
-                             {localStream && isCamOn ? <video autoPlay muted ref={v => v && (v.srcObject = localStream)} className="w-full h-full object-cover -scale-x-100" /> : <div className="w-full h-full flex items-center justify-center bg-[#222]"><Users size={24} className="text-gray-500"/></div>}
-                        </div>
-                        
-                        <button onClick={toggleFull} className="absolute top-4 right-4 bg-black/50 p-2 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity z-30">
-                            {fullScreen ? <Minimize size={20}/> : <Maximize size={20}/>}
-                        </button>
-                    </div>
-                    <div className={`flex justify-center gap-6 ${fullScreen ? 'absolute bottom-8 left-0 right-0' : ''}`}>
-                        <button onClick={toggleMic} className={`p-4 rounded-full shadow-lg ${isMicOn ? 'bg-[#2B2D31] hover:bg-[#404249] text-white' : 'bg-red-500 text-white'} transition-colors`}>{isMicOn ? <Mic size={24}/> : <MicOff size={24}/>}</button>
-                        <button onClick={toggleCam} className={`p-4 rounded-full shadow-lg ${isCamOn ? 'bg-[#2B2D31] hover:bg-[#404249] text-white' : 'bg-red-500 text-white'} transition-colors`}>{isCamOn ? <Video size={24}/> : <VideoOff size={24}/>}</button>
-                        <button onClick={shareScreen} className={`p-4 rounded-full shadow-lg ${isScreenOn ? 'bg-green-500 text-white' : 'bg-[#2B2D31] hover:bg-[#404249] text-white'} transition-colors`}><Monitor size={24}/></button>
-                        <button onClick={onHangup} className="p-4 rounded-full bg-red-500 hover:bg-red-600 transition-colors shadow-lg text-white"><PhoneOff size={24}/></button>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
-}
-
-function TitleBar() {
-  if (!ipcRenderer) return null;
-  return (
-    <div className="h-8 bg-[#000] flex items-center justify-between select-none w-full border-b border-white/10 z-[9999] fixed top-0 left-0 right-0 drag-region">
-       <div className="flex items-center gap-2 px-3 no-drag">
-           <div className="w-3 h-3 bg-[var(--primary)] rounded-full flex items-center justify-center font-black text-[6px] text-white">T</div>
-           <span className="text-[10px] font-black text-gray-500 tracking-[0.2em] uppercase">TalkSpace</span>
-       </div>
-       <div className="flex h-full no-drag">
-           <button onClick={() => ipcRenderer.send('app-minimize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Minus size={14} /></button>
-           <button onClick={() => ipcRenderer.send('app-maximize')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-white/10 hover:text-white transition-colors"><Square size={12} /></button>
-           <button onClick={() => ipcRenderer.send('app-close')} className="h-full w-10 flex items-center justify-center text-gray-400 hover:bg-red-500 hover:text-white transition-colors"><X size={14} /></button>
-       </div>
-       <style>{`.drag-region { -webkit-app-region: drag; } .no-drag { -webkit-app-region: no-drag; }`}</style>
-    </div>
-  );
-}
-
+// --- MISSING LOADING SCREEN FIXED HERE ---
 function LoadingScreen() {
     const [fact, setFact] = useState(LOADING_FACTS[0]);
     useEffect(() => { setFact(LOADING_FACTS[Math.floor(Math.random() * LOADING_FACTS.length)]); }, []);
@@ -316,7 +257,7 @@ export default function App() {
   const [primaryColor, setPrimaryColor] = useState(localStorage.getItem('accentColor') || '#5865F2');
   const [updateReady, setUpdateReady] = useState(false);
   const [updateInfo, setUpdateInfo] = useState({ status: 'idle', version: '' });
-  const [newBadge, setNewBadge] = useState(null); // For modal
+  const [newBadge, setNewBadge] = useState(null); 
 
   useEffect(() => {
       document.documentElement.style.setProperty('--primary', primaryColor);
@@ -330,8 +271,6 @@ export default function App() {
           if(user && data.userId === user._id) setUser(data.user);
       });
 
-      // BADGES CHECK FROM SERVER (ME RESPONSE)
-      
       socket.on('sound_played', (sound) => {
           new Audio(`./sounds/${sound}.mp3`).play().catch(e => console.log("Sound error", e));
       });
@@ -393,6 +332,51 @@ export default function App() {
   );
 }
 
+const MemoizedMessage = React.memo(({ m, user, onReact, onContextMenu, onReply, setLightboxImage }) => {
+    const isMe = m.senderId === user._id;
+    const isMentioned = m.text.includes(`@${user.username}`);
+
+    return (
+        <div 
+            className={`px-4 py-0.5 hover:bg-[#111]/50 relative group pr-16 ${isMentioned ? 'highlight-msg' : ''}`} 
+            onContextMenu={(e)=>{e.preventDefault(); onContextMenu(e, m)}}
+        >
+             <div className="flex gap-4 mt-4">
+                 <img src={m.senderAvatar} className="w-10 h-10 rounded-full bg-zinc-800 object-cover cursor-pointer hover:opacity-80" alt="av" />
+                 <div className="flex-1 min-w-0">
+                     <div className="flex items-center gap-2 mb-0.5">
+                         <span className="font-bold text-white cursor-pointer hover:underline">{m.senderName}</span>
+                         <span className="text-[11px] text-[#949BA4]">{new Date(m.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                         {m.isPinned && <Pin size={12} className="text-red-400 rotate-45" />}
+                     </div>
+                     {m.replyTo && (
+                        <div className="flex items-center gap-1 opacity-60 text-xs mb-1">
+                            <div className="w-4 h-2 border-t-2 border-l-2 border-gray-500 rounded-tl-md"/>
+                            <span className="font-bold text-gray-400">@{m.replyTo.senderName}</span>
+                            <span className="text-gray-500 truncate max-w-[200px]">{m.replyTo.text}</span>
+                        </div>
+                     )}
+                     <div className="text-[#DBDEE1]">
+                         {m.type === 'image' ? (
+                             <img onClick={()=>setLightboxImage(m.fileUrl)} src={m.fileUrl} className="max-w-[300px] max-h-[300px] rounded-lg shadow-lg border border-white/5 cursor-zoom-in" alt="attachment"/>
+                         ) : m.type === 'audio' ? (
+                             <div className="bg-[#2B2D31] p-2 rounded flex items-center gap-3 w-64 border border-white/10">
+                                 <div className="p-2 bg-[var(--primary)] rounded-full"><Play size={16} className="text-white"/></div>
+                                 <audio controls src={m.fileUrl} className="w-full h-8"/>
+                             </div>
+                         ) : (
+                             <div className="text-[15px] leading-relaxed break-words markdown-body">
+                                 <ReactMarkdown remarkPlugins={[remarkGfm, rehypeSanitize]} components={{ code({node, inline, className, children, ...props}) { const match = /language-(\w+)/.exec(className || ''); return !inline && match ? ( <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter> ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>) } }}>{m.text}</ReactMarkdown>
+                                 {m.isEdited && <span className="text-[10px] text-gray-500 ml-1">(изм.)</span>}
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             </div>
+        </div>
+    )
+});
+
 function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -406,11 +390,9 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
   const [selectedMic, setSelectedMic] = useState(localStorage.getItem('selectedMic') || '');
   const [selectedCam, setSelectedCam] = useState(localStorage.getItem('selectedCam') || '');
   
-  // Status Bar Audio Controls
   const [micMuted, setMicMuted] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
   
-  // Viewing Profile
   const [viewProfile, setViewProfile] = useState(null);
 
   const refresh = useCallback(async () => {
@@ -458,7 +440,6 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
 
   return (
     <div className="relative flex h-full z-10 overflow-hidden" onClick={()=>setContextMenu(null)}>
-      
       {/* 1. SERVER LIST */}
       <div className="w-[72px] flex flex-col items-center py-3 gap-3 bg-[#050505] border-r border-white/5 shrink-0 z-20 overflow-y-auto no-scrollbar">
         <div onClick={() => navigate('/friends')} className="relative w-12 h-12 bg-[#111] hover:bg-[var(--primary)] rounded-[24px] hover:rounded-[16px] flex items-center justify-center cursor-pointer transition-all duration-300 group shadow-md text-gray-200">
@@ -494,8 +475,8 @@ function MainLayout({ user, setUser, onLogout, updateInfo, setUpdateInfo }) {
       <div className="flex-1 flex flex-col bg-[#0B0B0C] relative min-w-0 z-10">
         <Routes>
           <Route path="/friends" element={<FriendsView user={user} refresh={refresh} />} />
-          <Route path="/chat/:friendId" element={<ChatView user={user} noiseSuppression={noiseSuppression} selectedMic={micMuted ? null : selectedMic} selectedCam={selectedCam} />} />
-          <Route path="/server/:serverId" element={<ServerView user={user} noiseSuppression={noiseSuppression} pttEnabled={pttEnabled} pttKey={pttKey} selectedMic={micMuted ? null : selectedMic} setViewProfile={setViewProfile} />} />
+          <Route path="/chat/:friendId" element={<ChatView user={user} noiseSuppression={noiseSuppression} selectedMic={selectedMic} selectedCam={selectedCam} />} />
+          <Route path="/server/:serverId" element={<ServerView user={user} noiseSuppression={noiseSuppression} pttEnabled={pttEnabled} pttKey={pttKey} selectedMic={selectedMic} setViewProfile={setViewProfile} />} />
           <Route path="*" element={<Navigate to="/friends" />} />
         </Routes>
       </div>
@@ -519,9 +500,7 @@ const DMSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusMenu,
     <>
         <div className="flex-1 p-2 space-y-0.5 overflow-y-auto custom-scrollbar">
           <button onClick={() => navigate('/friends')} className={`w-full flex items-center gap-3 px-3 py-2 rounded-[4px] transition-all ${window.location.hash.includes('/friends') ? 'bg-[#333] text-white' : 'text-[#949BA4] hover:bg-[#222] hover:text-[#DBDEE1]'}`}>
-            <Users size={20} /> <div className="flex-1 flex justify-between items-center"><span className="text-[15px] font-medium">Друзья</span> 
-            {user?.requests?.length > 0 && <span className="bg-red-600 text-white text-[10px] font-bold px-1.5 rounded-full min-w-[18px] text-center">{user.requests.length}</span>}
-            </div>
+            <Users size={20} /> <div className="flex-1 flex justify-between items-center"><span className="text-[15px] font-medium">Друзья</span></div>
           </button>
           <div className="mt-4 mb-1 px-3 text-[11px] font-bold text-[#949BA4] uppercase tracking-wide flex items-center justify-between select-none hover:text-[#DBDEE1]"><span>Личные сообщения</span> <Plus size={14} className="cursor-pointer"/></div>
           {user?.chats?.length > 0 ? user.chats.map(c => {
@@ -570,7 +549,7 @@ const ServerSidebar = ({ user, navigate, setShowSettings, statusMenu, setStatusM
                     <div className="relative"><img src={m.avatar} className="w-8 h-8 rounded-full object-cover" alt="av"/><StatusDot status={m.status}/></div>
                     <div className="flex-1 overflow-hidden leading-tight">
                         <p className={`text-sm font-medium truncate ${m._id === activeServer.owner ? 'text-yellow-400' : 'text-gray-300'}`}>{m.displayName} {m._id === activeServer.owner && <Crown size={10} className="inline"/>}</p>
-                        <p className="text-[10px] text-gray-500 truncate">{m.status === 'online' ? m.activity || 'В сети' : m.status}</p>
+                        <p className="text-[10px] text-gray-500 truncate">{m.bio || m.status}</p>
                     </div>
                  </div>
             ))}
@@ -596,9 +575,9 @@ const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateSta
           <div className="flex-1 overflow-hidden leading-tight relative h-8">
               <div className="absolute top-0 left-0 transition-all duration-300 group-hover:-top-8">
                   <p className="text-xs font-bold text-white truncate">{user?.displayName}</p>
-                  <p className="text-[11px] text-[#DBDEE1] truncate">{user?.activity || user?.status}</p>
+                  <p className="text-[11px] text-[#DBDEE1]">{user?.status}</p>
               </div>
-              <div className="absolute top-8 left-0 transition-all duration-300 group-hover:top-1.5 opacity-0 group-hover:opacity-100">
+              <div className="absolute top-8 left-0 transition-all duration-300 group-hover:top-1.5">
                   <p className="text-xs font-bold text-white">@{user?.username}</p>
               </div>
           </div>
@@ -623,6 +602,10 @@ const UserPanel = ({ user, setShowSettings, statusMenu, setStatusMenu, updateSta
 // --- CONTEXT MENU ---
 const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
     const { x, y, type, data, extra } = menu;
+    // Server Actions
+    const deleteS = async () => { if(window.confirm(`Удалить ${data.name}?`)) { await axios.post(`${SERVER_URL}/api/delete-server`, { serverId: data._id }); refresh(); close(); navigate('/friends'); }};
+    const leaveS = async () => { if(window.confirm(`Выйти из ${data.name}?`)) { await axios.post(`${SERVER_URL}/api/leave-server`, { serverId: data._id, userId: user._id }); refresh(); close(); navigate('/friends'); }};
+    const inviteS = () => { navigator.clipboard.writeText("INVITE-" + data._id.slice(-6).toUpperCase()); alert("Код скопирован"); close(); };
     
     // Message Actions
     const copyText = () => { if(navigator.clipboard) navigator.clipboard.writeText(data.text || data.fileUrl); close(); };
@@ -631,10 +614,20 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
     const editMsg = () => { extra.onEdit(data); close(); };
     const replyMsg = () => { extra.onReply(data); close(); };
     const pinMsg = () => { extra.onPin(data._id, !data.isPinned); close(); };
-    const addReaction = () => { /* Just open standard emoji picker via hover menu for now */ close(); };
 
     return (
         <div style={{ top: y, left: x }} className="fixed bg-[#111] border border-black/50 rounded-[4px] shadow-[0_8px_16px_rgba(0,0,0,0.5)] z-[9999] py-1.5 w-56 font-medium text-xs text-gray-300" onMouseLeave={close}>
+            {type === 'server' && (
+                <>
+                    <button onClick={inviteS} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><LinkIcon size={14}/> Пригласить людей</button>
+                    <div className="h-[1px] bg-white/10 my-1"/>
+                    {data.owner === user._id ? (
+                        <button onClick={deleteS} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><Trash size={14}/> Удалить сервер</button>
+                    ) : (
+                        <button onClick={leaveS} className="w-full text-left px-2 py-1.5 text-red-400 hover:bg-red-500 hover:text-white flex gap-2"><LeaveIcon size={14}/> Покинуть сервер</button>
+                    )}
+                </>
+            )}
             {type === 'message' && (
                 <>
                     <button onClick={replyMsg} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2"><Reply size={14}/> Ответить</button>
@@ -653,12 +646,6 @@ const GlobalContextMenu = ({ menu, user, refresh, navigate, close }) => {
                     <button onClick={copyId} className="w-full text-left px-2 py-1.5 hover:bg-[#5865F2] hover:text-white flex gap-2">Копировать ID</button>
                 </>
             )}
-            
-            {/* SERVER MENU IS TRIGGERED BY HEADER CLICK usually, but for context list: */}
-            {type === 'server' && (
-                 // Logic remains similar to previous for servers
-                 <div></div>
-            )}
         </div>
     )
 };
@@ -674,15 +661,14 @@ function ChatInput({ onSend, onUpload, placeholder, members = [], onType }) {
     // Throttled typing emit
     const lastTypeTime = useRef(0);
     const handleChange = (e) => {
-        const val = e.target.value;
-        setText(val);
+        setText(e.target.value);
         const now = Date.now();
         if(now - lastTypeTime.current > 2000) {
             onType && onType();
             lastTypeTime.current = now;
         }
 
-        const lastWord = val.split(" ").pop();
+        const lastWord = e.target.value.split(" ").pop();
         if (lastWord.startsWith("@")) {
             setMentionSearch(lastWord.slice(1));
         } else {
@@ -833,7 +819,13 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                                                 <SyntaxHighlighter style={dracula} language={match[1]} PreTag="div" {...props}>{String(children).replace(/\n$/, '')}</SyntaxHighlighter>
                                                                 ) : (<code className="bg-[#2B2D31] px-1 py-0.5 rounded text-sm text-gray-200 font-mono" {...props}>{children}</code>)
                                                             },
-                                                            p: ({children}) => <p>{children}</p> 
+                                                            p: ({children}) => {
+                                                                // Mention Highlight
+                                                                if (typeof children === 'string' && children.includes('@')) {
+                                                                    return <p className="inline-block"><span className="bg-[#5865F2]/30 text-[#DEE0FC] px-1 rounded font-medium cursor-pointer hover:bg-[#5865F2] hover:text-white transition-colors">{children}</span></p>
+                                                                }
+                                                                return <p>{children}</p>
+                                                            }
                                                         }}
                                                     >
                                                         {m.text}
@@ -843,13 +835,6 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                              </div>
                                          )}
                                      </div>
-                                     {m.ogData && (
-                                         <div className="mt-2 border-l-4 border-[var(--primary)] bg-[#1E1F22] rounded p-2 max-w-md">
-                                             <h4 className="font-bold text-[#00A8FC] hover:underline cursor-pointer" onClick={()=>window.open(m.ogData.url, '_blank')}>{m.ogData.title}</h4>
-                                             <p className="text-xs text-gray-400 mt-1 line-clamp-2">{m.ogData.description}</p>
-                                             {m.ogData.image && <img src={m.ogData.image} className="mt-2 rounded max-h-40 object-cover w-full" alt="preview"/>}
-                                         </div>
-                                     )}
                                      {m.reactions?.length > 0 && (
                                          <div className="flex gap-1 mt-1 flex-wrap">
                                              {m.reactions.map((r, i) => (
@@ -861,7 +846,7 @@ function MessageList({ messages, user, onReact, onContextMenu, onReply }) {
                                      )}
                                  </div>
                              </div>
-                             {/* Hover Actions (Only Reply & React & More) */}
+                             {/* Hover Actions (Only Reply & React) */}
                              <div className="absolute -top-2 right-4 bg-[#313338] shadow-[0_2px_4px_rgba(0,0,0,0.2)] p-1 rounded border border-[#2B2D31] flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                                  <button onClick={()=>onReact(m._id, '❤️')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Нравится">❤️</button>
                                  <button onClick={()=>onReact(m._id, '😂')} className="p-1.5 hover:bg-[#404249] rounded transition-colors text-lg leading-none hover-tooltip" data-tooltip="Смешно">😂</button>
@@ -903,6 +888,8 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const [isDragging, setIsDragging] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  
+  // Context Menu State
   const [ctxMenu, setCtxMenu] = useState(null);
   
   const friend = activeChat?.members?.find(m => m._id !== user._id);
@@ -939,6 +926,7 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const handleDelete = (msgId) => axios.post(`${SERVER_URL}/api/message/delete`, { chatId: activeChat._id, msgId });
   const handlePin = (msgId, isPinned) => axios.post(`${SERVER_URL}/api/message/pin`, { chatId: activeChat._id, msgId, isPinned });
 
+  const typingTimeout = useRef();
   const handleType = () => {
       socket.emit('typing', { room: activeChat._id, user: user.displayName });
       setTimeout(() => socket.emit('stop_typing', { room: activeChat._id, user: user.displayName }), 2000);
@@ -1009,6 +997,7 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
       } 
   };
 
+  // Drag & Drop
   const onDrop = async (e) => {
       e.preventDefault(); setIsDragging(false);
       if(e.dataTransfer.files[0]) {
@@ -1026,6 +1015,8 @@ function ChatView({ user, noiseSuppression, selectedMic, selectedCam }) {
   const handleContextMenu = (e, msg) => {
       setCtxMenu({ x: e.clientX, y: e.clientY, type: 'message', data: msg, extra: { onEdit: setEditMsg, onDelete: handleDelete, onPin: handlePin, onReply: setReplyTo } });
   };
+
+  if (!activeChat) return <div className="flex-1 flex items-center justify-center text-gray-500 font-bold animate-pulse">Загрузка...</div>;
 
   const filteredMessages = messages.filter(m => !searchQuery || m.text?.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -1277,7 +1268,7 @@ function ServerView({ user, noiseSuppression, pttEnabled, pttKey, selectedMic, s
                 {server?.members?.map(m => (
                     <div key={m._id} onContextMenu={(e)=>{e.preventDefault(); if(server.owner===user._id && m._id!==user._id) if(window.confirm("Кикнуть?")) kickMember(m._id)}} onClick={() => setViewProfile(m)} className="flex items-center gap-2 mb-2 p-1.5 hover:bg-[#222] rounded-lg cursor-pointer opacity-90 hover:opacity-100 transition-all">
                         <img src={m.avatar} className="w-8 h-8 rounded-full bg-zinc-800 object-cover" alt="av"/>
-                        <div><p className={`font-bold text-sm ${server.owner===m._id ? 'text-[#F0B232]' : 'text-[#DBDEE1]'}`}>{m.displayName} {server.owner===m._id && <Crown size={12} className="inline ml-1"/>}</p><p className="text-[10px] text-[#949BA4] font-medium">{m.status}</p></div>
+                        <div><p className={`font-bold text-sm ${server.owner===m._id ? 'text-[#F0B232]' : 'text-[#DBDEE1]'}`}>{m.displayName} {server.owner===m._id && <Crown size={12} className="inline ml-1"/>}</p><p className="text-[10px] text-gray-500 truncate">{m.bio || m.status}</p></div>
                     </div>
                 ))}
             </div>
@@ -1344,21 +1335,11 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
     const [audioDevices, setAudioDevices] = useState([]);
     const [videoDevices, setVideoDevices] = useState([]);
 
-    // ADMIN
-    const [isAdminMode, setIsAdminMode] = useState(false);
-    const [adminTargetId, setAdminTargetId] = useState("");
-
     useEffect(() => {
         navigator.mediaDevices.enumerateDevices().then(devices => {
             setAudioDevices(devices.filter(d => d.kind === 'audioinput'));
             setVideoDevices(devices.filter(d => d.kind === 'videoinput'));
         });
-
-        const handleKeys = (e) => {
-            if(e.ctrlKey && e.shiftKey && e.code === 'KeyA') setIsAdminMode(prev => !prev);
-        };
-        window.addEventListener('keydown', handleKeys);
-        return () => window.removeEventListener('keydown', handleKeys);
     }, []);
     
     const [autoLaunch, setAutoLaunch] = useState(false);
@@ -1409,16 +1390,6 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
             alert(e.response?.data?.error || "Ошибка сохранения");
         }
     };
-    
-    const giveBadge = async (badgeName, icon) => {
-        await axios.post(`${SERVER_URL}/api/admin/give-badge`, {
-            adminId: user._id,
-            targetId: adminTargetId,
-            badgeName,
-            badgeIcon: icon
-        });
-        alert("Выдано!");
-    };
 
     return (
         <div className="fixed inset-0 z-[300] flex items-center justify-center">
@@ -1434,13 +1405,6 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                             {tab === 'account' ? 'Моя учетная запись' : tab === 'profile' ? 'Профиль' : 'Голос и Видео'}
                         </div>
                     ))}
-                    
-                    {user?.isAdmin && (
-                        <div onClick={()=>setActiveTab('admin')} className={`px-3 py-2 rounded-lg text-sm font-medium mb-1 cursor-pointer transition-all ${activeTab==='admin' ? 'bg-red-500/20 text-red-200' : 'text-gray-400 hover:bg-white/5'}`}>
-                            Админ-панель
-                        </div>
-                    )}
-                    
                     <div className="h-[1px] bg-white/10 my-4 mx-2"/><div onClick={onLogout} className="text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg text-sm font-bold cursor-pointer flex items-center justify-between transition-colors">Выйти <LogOut size={16}/></div>
                 </div>
 
@@ -1522,17 +1486,6 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                             </div>
                         </div>
                     )}
-                    
-                    {activeTab === 'admin' && user?.isAdmin && (
-                        <div>
-                             <h2 className="text-2xl font-bold text-white mb-6">Админ-панель</h2>
-                             <Input label="ID пользователя" value={adminTargetId} onChange={e=>setAdminTargetId(e.target.value)} className="bg-[#050505]"/>
-                             <div className="flex gap-2">
-                                 <button onClick={()=>giveBadge('Developer', '🛠')} className="bg-blue-600 px-4 py-2 rounded text-white text-xs">Выдать Dev</button>
-                                 <button onClick={()=>giveBadge('Admin', '🛡')} className="bg-red-600 px-4 py-2 rounded text-white text-xs">Выдать Admin</button>
-                             </div>
-                        </div>
-                    )}
 
                     {activeTab === 'voice' && (
                         <div className="max-w-xl">
@@ -1549,8 +1502,8 @@ function SettingsModal({ user, setUser, onClose, onLogout, noise, setNoise, ptt,
                                 
                                 <div className="h-[1px] bg-white/10"/>
                                 
-                                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-4' : 'translate-x-0'}`}/></div></div>
-                                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-10 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-4' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}
+                                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Шумоподавление</h4><p className="text-xs text-gray-400 mt-1">Убирает фоновый шум из вашего микрофона.</p></div><div onClick={()=>setNoise(!noise)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${noise ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${noise ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>
+                                <div className="flex items-center justify-between"><div><h4 className="font-bold text-gray-200">Push-to-Talk</h4><p className="text-xs text-gray-400 mt-1">Микрофон работает только при удержании клавиши.</p></div><div onClick={()=>setPtt(!ptt)} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${ptt ? 'bg-green-500' : 'bg-gray-500'}`}><div className={`w-4 h-4 bg-white rounded-full shadow transition-transform ${ptt ? 'translate-x-6' : 'translate-x-0'}`}/></div></div>{ptt && <div className="flex items-center gap-4 bg-black/30 p-2 rounded"><span className="text-sm font-bold text-gray-400">Клавиша:</span><button onClick={()=>setKeyWait(true)} className="bg-[#404249] px-4 py-1 rounded text-white font-mono text-sm border border-white/10 hover:border-white/50">{keyWait ? 'Нажмите клавишу...' : pttKey}</button></div>}
                                 
                                 <div className="h-[1px] bg-white/5"/>
                                 
