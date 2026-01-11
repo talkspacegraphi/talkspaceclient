@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron');
+const { app, BrowserWindow, session, ipcMain, Tray, Menu, nativeImage, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const url = require('url');
@@ -7,6 +7,9 @@ const log = require('electron-log');
 // Настройка логирования
 log.transports.file.level = 'info';
 autoUpdater.logger = log;
+
+// Отключаем автозагрузку по умолчанию (будем управлять из настроек)
+autoUpdater.autoDownload = false;
 
 if (require('electron-squirrel-startup')) return app.quit();
 
@@ -20,22 +23,16 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.quit();
 } else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
+  app.on('second-instance', (event, commandLine) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       if (!mainWindow.isVisible()) mainWindow.show();
       mainWindow.focus();
-      const deepLink = commandLine.find((arg) => arg.startsWith('talkspace://'));
-      if (deepLink) mainWindow.webContents.send('deep-link', deepLink);
     }
   });
 
   app.whenReady().then(() => {
-    if (process.defaultApp) {
-      if (process.argv.length >= 2) app.setAsDefaultProtocolClient('talkspace', process.execPath, [path.resolve(process.argv[1])]);
-    } else {
-      app.setAsDefaultProtocolClient('talkspace');
-    }
+    app.setAsDefaultProtocolClient('talkspace');
 
     session.defaultSession.setPermissionCheckHandler(() => true);
     session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => callback(true));
@@ -43,7 +40,9 @@ if (!gotTheLock) {
     createSplashWindow();
     
     if (app.isPackaged) {
+        // Проверка обновлений при запуске
         setTimeout(() => autoUpdater.checkForUpdates(), 3000);
+        // Интервал проверки (10 минут)
         setInterval(() => autoUpdater.checkForUpdates(), 1000 * 60 * 10); 
     } else {
         setTimeout(createMainWindow, 1500);
@@ -78,18 +77,15 @@ function createMainWindow() {
   });
 
   const startUrl = app.isPackaged 
-    ? url.format({
-        pathname: path.resolve(__dirname, 'build', 'index.html'), 
-        protocol: 'file:',
-        slashes: true
-      })
+    ? url.format({ pathname: path.join(__dirname, 'build', 'index.html'), protocol: 'file:', slashes: true })
     : 'http://localhost:3000';
 
   mainWindow.loadURL(startUrl);
 
   mainWindow.once('ready-to-show', () => {
     if (splashWindow) { splashWindow.close(); splashWindow = null; }
-    mainWindow.show(); mainWindow.focus();
+    mainWindow.show();
+    mainWindow.focus();
   });
 
   mainWindow.on('close', (event) => {
@@ -112,66 +108,42 @@ function createTray() {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'TalkSpace', enabled: false }, 
     { type: 'separator' },
-    { label: 'Check for updates', click: () => { 
-        if(app.isPackaged) autoUpdater.checkForUpdates();
-        if(mainWindow) mainWindow.show(); 
-    }},
+    { label: 'Check for updates', click: () => autoUpdater.checkForUpdates() },
     { label: 'Quit TalkSpace', click: () => { isQuitting = true; app.quit(); }}
   ]);
   tray.setContextMenu(contextMenu);
   tray.on('click', () => { if (mainWindow) mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show(); });
 }
 
-app.on('open-url', (event, url) => { event.preventDefault(); if (mainWindow) mainWindow.webContents.send('deep-link', url); });
-
+// --- IPC EVENTS ---
 ipcMain.on('app-minimize', () => mainWindow?.minimize());
 ipcMain.on('app-maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
 ipcMain.on('app-close', () => mainWindow?.close());
 ipcMain.on('flash-frame', () => { if(mainWindow && !mainWindow.isFocused()) mainWindow.flashFrame(true); });
 
+// Update System IPC
 ipcMain.on('restart_app', () => { isQuitting = true; autoUpdater.quitAndInstall(); });
+ipcMain.on('check-for-updates-manual', () => { if(app.isPackaged) autoUpdater.checkForUpdates(); });
+ipcMain.on('set-auto-download', (event, value) => { autoUpdater.autoDownload = value; log.info('Auto download set to:', value); });
 
-ipcMain.on('check-for-updates-manual', () => {
-    if(app.isPackaged) {
-        autoUpdater.checkForUpdates();
-    }
-});
-
-ipcMain.on('get-auto-launch-status', (event) => { const settings = app.getLoginItemSettings(); event.reply('auto-launch-status', settings.openAtLogin); });
-ipcMain.on('toggle-auto-launch', (event, enable) => { app.setLoginItemSettings({ openAtLogin: enable, path: process.execPath }); });
-
-function sendStatusToSplash(text) { if (splashWindow) splashWindow.webContents.send('message', text); }
-
+// Auto Updater Events
 autoUpdater.on('checking-for-update', () => {
-    sendStatusToSplash('Checking...');
-    log.info('Checking for update...');
     if(mainWindow) mainWindow.webContents.send('update_status', {status: 'checking'});
 });
 autoUpdater.on('update-available', (info) => {
-    sendStatusToSplash('Update found...');
-    log.info('Update available:', info);
-    if(mainWindow) mainWindow.webContents.send('update_available_info', info.version);
     if(mainWindow) mainWindow.webContents.send('update_status', {status: 'available', version: info.version});
 });
 autoUpdater.on('update-not-available', () => {
-    sendStatusToSplash('Starting...');
-    log.info('Update not available.');
     if(mainWindow) mainWindow.webContents.send('update_status', {status: 'latest'});
-    if(!mainWindow) setTimeout(createMainWindow, 1000);
 });
 autoUpdater.on('error', (err) => {
-    sendStatusToSplash('Ready');
-    log.error('Update error:', err);
     if(mainWindow) mainWindow.webContents.send('update_status', {status: 'error'});
-    if(!mainWindow) setTimeout(createMainWindow, 1000);
 });
 autoUpdater.on('download-progress', (p) => {
-    sendStatusToSplash(`DL: ${Math.round(p.percent)}%`);
+    if(mainWindow) mainWindow.webContents.send('update_progress', p.percent);
 });
-autoUpdater.on('update-downloaded', () => {
-    sendStatusToSplash('Ready');
-    log.info('Update downloaded');
-    if(mainWindow) mainWindow.webContents.send('update_downloaded');
+autoUpdater.on('update-downloaded', (info) => {
+    if(mainWindow) mainWindow.webContents.send('update_downloaded', info.version);
 });
 
-app.on('window-all-closed', () => {});
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
